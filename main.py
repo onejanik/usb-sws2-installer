@@ -84,7 +84,8 @@ class Api:
             return {"error": "Window not initialized yet."}
 
         try:
-            result = self.window.create_file_dialog(webview.FOLDER_DIALOG, title=f"Select your '{GAME_DIR_NAME}' folder")
+            start_dir = str(Path.home()) 
+            result = self.window.create_file_dialog(webview.FOLDER_DIALOG, directory=start_dir)
             if not result or not result[0]:
                 return {"error": "No folder selected."}
 
