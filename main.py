@@ -10,19 +10,18 @@ import time
 import requests
 import webbrowser
 from pathlib import Path
+
 os.environ["PYWEBVIEW_CHROMIUM_FLAGS"] = "--no-sandbox --disable-gpu"
 
 try:
     import webview
 except ImportError:
-    print("Installing pywebview...")
     subprocess.run([sys.executable, "-m", "pip", "install", "pywebview"], check=True)
     os.execl(sys.executable, sys.executable, *sys.argv)
 
 try:
     from bs4 import BeautifulSoup
 except ImportError:
-    print("Installing beautifulsoup4...")
     subprocess.run([sys.executable, "-m", "pip", "install", "beautifulsoup4"], check=True)
     os.execl(sys.executable, sys.executable, *sys.argv)
 
@@ -33,6 +32,11 @@ WEBSITE_URL = "https://www.u7-trainz.de/downloads"
 GAME_DIR_NAME = "SubwaySim 2"
 MODS_DIR_NAME = "Mods"
 STATUS_FILE = "mod_status.json"
+
+DOWNLOAD_CHUNK_SIZE = 8192
+DOWNLOAD_TIMEOUT = 60
+DOWNLOAD_PROGRESS_INTERVAL = 4.0
+
 
 class Api:
     def __init__(self):
@@ -57,7 +61,8 @@ class Api:
         self.selected_game_folder = game_folder
         mods_folder = game_folder / MODS_DIR_NAME
         mod_file_path = mods_folder / FILE_NAME
-        status_file_path = mods_folder / STATUS_FILE
+        status_file_path = self._get_status_file_path(mods_folder)
+        legacy_status_file_path = mods_folder / STATUS_FILE
 
         local_version = None
         file_exists = mod_file_path.exists()
@@ -66,6 +71,19 @@ class Api:
             try:
                 with open(status_file_path, 'r') as f:
                     local_version = json.load(f).get("installed_version")
+            except Exception:
+                pass
+        elif legacy_status_file_path.exists():
+            try:
+                with open(legacy_status_file_path, 'r') as f:
+                    data = json.load(f)
+                    local_version = data.get("installed_version")
+                try:
+                    status_file_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(status_file_path, 'w') as f:
+                        json.dump(data, f, indent=2)
+                except Exception as e:
+                    print(f"Error migrating status file to LocalAppData: {e}")
             except Exception:
                 pass
 
@@ -84,7 +102,7 @@ class Api:
             return {"error": "Window not initialized yet."}
 
         try:
-            start_dir = str(Path.home()) 
+            start_dir = str(Path.home())
             result = self.window.create_file_dialog(webview.FOLDER_DIALOG, directory=start_dir)
             if not result or not result[0]:
                 return {"error": "No folder selected."}
@@ -117,6 +135,9 @@ class Api:
             self._send_js_update("showErrorView", "No game folder selected or found.")
             return {"error": "No game folder selected or found."}
 
+        if self.install_thread and self.install_thread.is_alive():
+            return {"error": "Installation is already running."}
+
         self.installation_cancelled = False
         self.install_thread = threading.Thread(target=self._do_install_task, daemon=True)
         self.install_thread.start()
@@ -143,9 +164,7 @@ class Api:
         except Exception as e:
             return {"error": str(e)}
 
-
     def get_settings(self):
-        """Load settings from JSON file"""
         try:
             settings_file = Path("installer_settings.json")
             if settings_file.exists():
@@ -154,7 +173,6 @@ class Api:
         except Exception as e:
             print(f"Error loading settings: {e}")
 
-        # Default settings
         return {
             "tracking": False,
             "sound": True,
@@ -162,7 +180,6 @@ class Api:
         }
 
     def save_settings(self, settings):
-        """Save settings to JSON file"""
         try:
             with open("installer_settings.json", 'w') as f:
                 json.dump(settings, f, indent=2)
@@ -178,7 +195,7 @@ class Api:
 
     def _find_game_folder(self):
         if self.selected_game_folder and self.selected_game_folder.exists():
-             return self.selected_game_folder
+            return self.selected_game_folder
 
         possible_paths = []
 
@@ -205,6 +222,19 @@ class Api:
 
         print("Game folder not found in any standard paths")
         return None
+
+    def _get_status_file_path(self, mods_folder=None):
+        local_app_data = os.getenv('LOCALAPPDATA')
+        if local_app_data:
+            base = Path(local_app_data) / "SubwaySim2_USB_Installer"
+            try:
+                base.mkdir(parents=True, exist_ok=True)
+            except OSError as e:
+                print(f"Error creating LocalAppData status folder: {e}")
+            return base / STATUS_FILE
+        if mods_folder is not None:
+            return mods_folder / STATUS_FILE
+        return Path(STATUS_FILE)
 
     def _scrape_website_version(self):
         try:
@@ -283,6 +313,7 @@ class Api:
                 backup_created = self._backup_existing_mod(mods_folder)
 
             download_successful = False
+
             for attempt, url in enumerate([DOWNLOAD_URL, MIRROR_URL], 1):
                 if self.installation_cancelled:
                     if backup_created:
@@ -298,15 +329,25 @@ class Api:
 
                     with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
                         tmp_file_path = tmp_file.name
-                        with requests.get(url, stream=True, allow_redirects=True, timeout=60) as r:
+
+                        with requests.get(url, stream=True, allow_redirects=True, timeout=DOWNLOAD_TIMEOUT) as r:
                             r.raise_for_status()
                             total_size = int(r.headers.get('content-length', 0))
                             downloaded = 0
 
-                            if total_size > 0:
-                                self._send_js_update("updateProgress", 10, f"Download started ({total_size // 1024**2} MB)", 0, total_size)
+                            last_ui_update = 0.0
 
-                            for chunk in r.iter_content(chunk_size=8192):
+                            if total_size > 0:
+                                self._send_js_update(
+                                    "updateProgress",
+                                    10,
+                                    f"Download started ({total_size // 1024**2} MB)",
+                                    0,
+                                    total_size
+                                )
+                                last_ui_update = time.time()
+
+                            for chunk in r.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
                                 if self.installation_cancelled:
                                     if backup_created:
                                         self._restore_backup()
@@ -319,15 +360,35 @@ class Api:
                                 tmp_file.write(chunk)
                                 downloaded += len(chunk)
 
+                                now = time.time()
+                                should_update = (now - last_ui_update) >= DOWNLOAD_PROGRESS_INTERVAL
+
+                                is_finished = (total_size > 0 and downloaded >= total_size)
+
+                                if not (should_update or is_finished):
+                                    continue
+
+                                last_ui_update = now
+
                                 if total_size > 0:
+                                    percent_total = int((downloaded / total_size) * 100)
                                     download_percent = int((downloaded / total_size) * 80) + 10
-                                    self._send_js_update("updateProgress", download_percent,
-                                        f"Downloading from server {attempt}... {int((downloaded / total_size) * 100)}%",
-                                        downloaded, total_size)
+
+                                    self._send_js_update(
+                                        "updateProgress",
+                                        download_percent,
+                                        f"Downloading from server {attempt}... {percent_total}%",
+                                        downloaded,
+                                        total_size
+                                    )
                                 else:
-                                    self._send_js_update("updateProgress", -1,
+                                    self._send_js_update(
+                                        "updateProgress",
+                                        -1,
                                         f"Downloading from server {attempt}... {downloaded // 1024**2} MB",
-                                        downloaded, downloaded * 2)
+                                        downloaded,
+                                        downloaded * 2
+                                    )
 
                     download_successful = True
                     break
@@ -387,13 +448,12 @@ class Api:
                     pass
 
     def _set_local_version(self, mods_folder, version_string):
-        status_file_path = mods_folder / STATUS_FILE
+        status_file_path = self._get_status_file_path(mods_folder)
         try:
             with open(status_file_path, 'w') as f:
                 json.dump({"installed_version": version_string}, f, indent=2)
         except OSError as e:
             print(f"Error writing status JSON: {e}")
-
 
     def _send_js_update(self, function_name, *args):
         if self.window:
@@ -407,21 +467,14 @@ class Api:
             except Exception as e:
                 print(f"Error sending JS update: {e}")
 
+
 def on_loaded():
     api.set_window(main_window)
     main_window.show()
 
-    def delayed_status_check():
-        time.sleep(0.5)
-        main_window.evaluate_js("checkInitialStatus()")
-
-    status_thread = threading.Thread(target=delayed_status_check, daemon=True)
-    status_thread.start()
 
 if __name__ == '__main__':
     api = Api()
-
-
 
     main_window = webview.create_window(
         'SubwaySim2 USB Installer v1.0 Beta',
