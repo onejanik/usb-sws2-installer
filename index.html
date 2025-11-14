@@ -170,8 +170,7 @@
     <div id="settings-panel" class="settings-panel">
         <h5 data-i18n="settings">Einstellungen</h5>
         <hr>
-        <div class="mb-3">
-        </div>
+        <div class="mb-3"></div>
         <div class="mb-3">
             <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" id="sound-toggle" checked onchange="toggleSound()">
@@ -212,8 +211,8 @@
                     <i class="fas fa-folder-open"></i> <span data-i18n="select_folder">Spielordner auswählen</span>
                 </button>
 
-                <button id="btn-install" onclick="startInstall()
-                        " class="btn btn-primary rounded-pill p-3" type="button" disabled>
+                <button id="btn-install" onclick="startInstall()"
+                        class="btn btn-primary rounded-pill p-3" type="button" disabled>
                     <i class="fas fa-download"></i> <span data-i18n="install_now">Jetzt Installieren</span>
                 </button>
                 <button id="btn-update" onclick="checkUpdate()"
@@ -225,7 +224,7 @@
 
         <div id="progress-view" class="app-view">
             <h1 data-i18n="downloading">Lade Assets herunter...</h1>
-            <h4 id="progress-text">Starte Prozess...</h4>
+            <h4 id="progress-text" data-i18n="installation_starting">Installation wird gestartet...</h4>
 
             <div class="progress border rounded shadow-lg" style="margin-top: 35px; height: 30px;">
                 <div id="progress-bar" class="progress-bar bg-primary progress-bar-animated progress-bar-striped"
@@ -265,7 +264,7 @@
             </div>
 
             <div id="progress-console" class="console" style="display: none;">
-                Starte Prozess...<br>
+                <div class="console-line" data-i18n="installation_starting_log">Installation wird gestartet...</div>
             </div>
         </div>
 
@@ -344,7 +343,24 @@
                 'settings': 'Einstellungen',
                 'enable_sound': 'Erfolgssound aktivieren',
                 'close': 'Schließen',
-                'confirm_cancel': 'Möchten Sie die Installation wirklich abbrechen?'
+                'confirm_cancel': 'Möchten Sie die Installation wirklich abbrechen?',
+                'installation_starting': 'Installation wird gestartet...',
+                'installation_starting_log': 'Installation wird gestartet...',
+                'complete': 'Abgeschlossen',
+                'path_selection_error': 'Fehler bei der Pfadauswahl',
+                'error_selecting_folder': 'Fehler beim Auswählen des Ordners',
+                'error_launching_game': 'Fehler beim Starten des Spiels',
+                'error_checking_updates': 'Fehler beim Prüfen auf Updates',
+                'latest_already': 'Sie haben bereits die neueste Version.',
+                'download_install_now': 'Jetzt herunterladen und installieren?',
+                'reinstall_now': 'Jetzt neu installieren?',
+                'api_not_loaded': 'Fehler: Anwendungs-API konnte nicht geladen werden. Bitte starte die Anwendung neu.',
+                'local': 'Lokal',
+                'remote': 'Remote',
+                'installer_update_available': 'Neue Installer-Version verfügbar.',
+                'installer_latest': 'Installer ist bereits auf dem neuesten Stand.',
+                'installer_update_error': 'Fehler beim Prüfen auf Installer-Updates.',
+                'installer_run_new': 'Neuen Installer herunterladen und starten?'
             },
             'en': {
                 'app_title': 'U-Bahn Sim Berlin Installer',
@@ -377,10 +393,10 @@
                 'speed': 'Speed',
                 'time_remaining': 'Time Remaining',
                 'file_size': 'File Size',
-                'settings': 'Settings',
-                'enable_sound': 'Enable success sound',
-                'close': 'Close',
-                'confirm_cancel': 'Do you really want to cancel the installation?'
+                'installer_update_available': 'Installer update available.',
+                'installer_latest': 'Installer is already up to date.',
+                'installer_update_error': 'Error checking for installer updates.',
+                'installer_run_new': 'Download and run the new installer now?'
             }
         };
 
@@ -429,6 +445,10 @@
             document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById('lang-' + lang).classList.add('active');
 
+            if (window.pywebview && pywebview.api && typeof pywebview.api.set_language === 'function') {
+                pywebview.api.set_language(lang).catch(e => console.log('set_language failed:', e));
+            }
+
             updateUITexts();
             if (currentStatus) {
                 updateStatusUI(currentStatus);
@@ -449,12 +469,9 @@
             const cancelBtn = document.getElementById('cancel-button');
 
             if (consoleBtn && consoleBtn.querySelector('span')) {
+                const consoleVisible = document.getElementById('progress-console').style.display === 'block';
                 const span = consoleBtn.querySelector('span');
-                if (span.textContent.includes('anzeigen') || span.textContent.includes('Show')) {
-                    span.textContent = t('console_show');
-                } else {
-                    span.textContent = t('console_hide');
-                }
+                span.textContent = consoleVisible ? t('console_hide') : t('console_show');
             }
 
             if (cancelBtn && !cancelBtn.disabled) {
@@ -494,15 +511,15 @@
         }
 
         function toggleConsole() {
-            const console = document.getElementById('progress-console');
+            const consoleEl = document.getElementById('progress-console');
             const button = document.getElementById('console-toggle');
             const span = button.querySelector('span');
 
-            if (console.style.display === 'none') {
-                console.style.display = 'block';
+            if (consoleEl.style.display === 'none') {
+                consoleEl.style.display = 'block';
                 span.textContent = t('console_hide');
             } else {
-                console.style.display = 'none';
+                consoleEl.style.display = 'none';
                 span.textContent = t('console_show');
             }
         }
@@ -569,7 +586,7 @@
             }
 
             console.error("API not available after multiple attempts");
-            showErrorView("Error: Application API could not be loaded. Please restart the application.");
+            showErrorView(t('api_not_loaded'));
         }
 
         async function selectPath() {
@@ -579,16 +596,16 @@
                     updateStatusUI(status);
                 } else if (status && status.error) {
                     console.warn("Path selection error:", status.error);
-                    showAlert(`Path selection error: ${status.error}`, 'danger');
+                    showAlert(`${t('path_selection_error')}: ${status.error}`, 'danger');
                 }
             } catch (e) {
-                showAlert(`Error selecting folder: ${e.message}`, 'danger');
+                showAlert(`${t('error_selecting_folder')}: ${e.message}`, 'danger');
             }
         }
 
-        function startInstall() {
+        async function startInstall() {
             if (currentStatus && currentStatus.error && currentStatus.path_required) {
-                selectPath();
+                await selectPath();
                 return;
             }
 
@@ -598,19 +615,36 @@
             lastUpdateTime = Date.now();
             lastDownloadedBytes = 0;
 
-            document.getElementById('progress-console').innerHTML = '<div class="console-line">Installation starting...</div>';
-            document.getElementById('progress-console').style.display = 'none';
+            const consoleEl = document.getElementById('progress-console');
+            consoleEl.innerHTML = '';
+            const line = document.createElement('div');
+            line.className = 'console-line';
+            line.textContent = t('installation_starting_log');
+            consoleEl.appendChild(line);
+
+            consoleEl.style.display = 'none';
             document.getElementById('console-toggle').querySelector('span').textContent = t('console_show');
             document.getElementById('progress-bar').style.width = '0%';
             document.getElementById('progress-bar').textContent = '0%';
-            document.getElementById('progress-text').textContent = 'Installation starting...';
+            document.getElementById('progress-text').textContent = t('installation_starting');
             document.getElementById('download-speed').textContent = '-- KB/s';
             document.getElementById('download-eta').textContent = '--:--';
             document.getElementById('file-size').textContent = '-- MB';
             document.getElementById('cancel-button').style.display = 'inline-block';
             document.getElementById('cancel-button').querySelector('span').textContent = t('cancel_installation');
 
-            pywebview.api.install_mod();
+            try {
+                const result = await pywebview.api.install_mod();
+                console.log('install_mod result:', result);
+
+                if (!result || result.error) {
+                    const msg = (result && result.error) || (result && result.message) || t('error_occurred');
+                    showErrorView(msg);
+                }
+            } catch (e) {
+                console.error('install_mod failed:', e);
+                showErrorView(e.message || t('error_occurred'));
+            }
         }
 
         function cancelInstallation() {
@@ -628,10 +662,10 @@
                 if (result.success) {
                     showAlert(result.message, 'success');
                 } else {
-                    showAlert(result.message, 'error');
+                    showAlert(result.message || t('error_launching_game'), 'error');
                 }
             } catch (e) {
-                showAlert(`Error launching game: ${e.message}`, 'error');
+                showAlert(`${t('error_launching_game')}: ${e.message}`, 'error');
             }
         }
 
@@ -706,22 +740,50 @@
             try {
                 const result = await pywebview.api.check_for_update(currentStatus.local_version);
                 if (result.update_available) {
-                    const install = confirm(`${t('update_available')}\n\nLocal: ${result.local}\nRemote: ${result.remote}\n\nDownload and install now?`);
+                    const install = confirm(
+                        `${t('update_available')}\n\n` +
+                        `${t('local')}: ${result.local}\n${t('remote')}: ${result.remote}\n\n` +
+                        `${t('download_install_now')}`
+                    );
                     if (install) {
                         startInstall();
                     }
                 } else if (result.error) {
                     if (result.force_install) {
-                        const install = confirm(`${result.message}\n\nReinstall now?`);
+                        const install = confirm(`${result.message}\n\n${t('reinstall_now')}`);
                         if (install) startInstall();
                     } else {
                         showAlert(result.message, 'danger');
                     }
                 } else {
-                    showAlert('You already have the latest version.', 'success');
+                    showAlert(t('latest_already'), 'success');
                 }
             } catch (e) {
-                showAlert(`Error checking for updates: ${e.message}`, 'danger');
+                showAlert(`${t('error_checking_updates')}: ${e.message}`, 'danger');
+            }
+        }
+
+        async function checkInstallerUpdate() {
+            try {
+                const info = await pywebview.api.check_installer_update();
+                console.log('installer update info:', info);
+
+                if (info.update_available) {
+                    const ok = confirm(
+                        `${t('installer_update_available')}\n\n` +
+                        `${t('local')}: ${info.local}\n${t('remote')}: ${info.remote}\n\n` +
+                        `${t('installer_run_new')}`
+                    );
+                    if (ok) {
+                        await pywebview.api.update_installer(info.url);
+                    }
+                } else if (!info.error) {
+                    showAlert(t('installer_latest'), 'success');
+                } else {
+                    showAlert(info.message || t('installer_update_error'), 'danger');
+                }
+            } catch (e) {
+                showAlert(`${t('installer_update_error')}: ${e.message}`, 'danger');
             }
         }
 
@@ -788,7 +850,7 @@
                 lastUpdateTime = currentTime;
                 lastDownloadedBytes = downloadedBytes;
             } else if (percent >= 100) {
-                speedEl.textContent = 'Complete';
+                speedEl.textContent = t('complete');
                 etaEl.textContent = '00:00';
             }
         }
