@@ -212,8 +212,8 @@
                     <i class="fas fa-folder-open"></i> <span data-i18n="select_folder">Spielordner auswählen</span>
                 </button>
 
-                <button id="btn-install" onclick="startInstall()"
-                        class="btn btn-primary rounded-pill p-3" type="button" disabled>
+                <button id="btn-install" onclick="startInstall()
+                        " class="btn btn-primary rounded-pill p-3" type="button" disabled>
                     <i class="fas fa-download"></i> <span data-i18n="install_now">Jetzt Installieren</span>
                 </button>
                 <button id="btn-update" onclick="checkUpdate()"
@@ -384,7 +384,7 @@
             }
         };
 
-        let currentLang = 'de'; // Will be loaded from settings
+        let currentLang = 'de';
         let currentStatus = null;
         let downloadStartTime = null;
         let lastUpdateTime = null;
@@ -394,17 +394,14 @@
             language: 'de'
         };
 
-        // Load settings on startup
         async function loadSettings() {
             try {
                 const loadedSettings = await pywebview.api.get_settings();
                 settings = { ...settings, ...loadedSettings };
                 currentLang = settings.language;
 
-                // Update UI based on loaded settings
                 document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
                 document.getElementById('lang-' + currentLang).classList.add('active');
-
 
                 document.getElementById('sound-toggle').checked = settings.sound;
             } catch (e) {
@@ -412,7 +409,6 @@
             }
         }
 
-        // Save settings
         async function saveSettings() {
             try {
                 await pywebview.api.save_settings(settings);
@@ -434,7 +430,6 @@
             document.getElementById('lang-' + lang).classList.add('active');
 
             updateUITexts();
-            // Don't reset status when changing language - keep current status
             if (currentStatus) {
                 updateStatusUI(currentStatus);
             }
@@ -472,7 +467,6 @@
             const panel = document.getElementById('settings-panel');
             panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 
-
             document.getElementById('sound-toggle').checked = settings.sound;
         }
 
@@ -498,7 +492,6 @@
                 console.log('Sound playback not available:', e);
             }
         }
-
 
         function toggleConsole() {
             const console = document.getElementById('progress-console');
@@ -617,7 +610,6 @@
             document.getElementById('cancel-button').style.display = 'inline-block';
             document.getElementById('cancel-button').querySelector('span').textContent = t('cancel_installation');
 
-
             pywebview.api.install_mod();
         }
 
@@ -635,7 +627,6 @@
                 const result = await pywebview.api.launch_game();
                 if (result.success) {
                     showAlert(result.message, 'success');
-
                 } else {
                     showAlert(result.message, 'error');
                 }
@@ -661,7 +652,7 @@
                 btnInstall.innerHTML = `<i class="fas fa-folder-open"></i> ${t('select_folder')}`;
 
                 if (status.path_required) {
-                    
+                    selectFolderBtn.style.display = 'block';
                 }
             } else {
                 gamePathStatusEl.style.display = 'block';
@@ -814,7 +805,6 @@
                 setView('success-view');
             } else {
                 showErrorView(message);
-
             }
         }
 
@@ -835,13 +825,30 @@
             alert(message);
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('DOM loaded, initializing...');
-            loadSettings().then(() => {
-                updateUITexts();
-            });
-        });
+        function onPywebviewReady() {
+            console.log('pywebview ready, initializing app...');
+            loadSettings()
+                .then(() => {
+                    updateUITexts();
+                    checkInitialStatus();
+                })
+                .catch(e => {
+                    console.log('Could not load settings, using defaults:', e);
+                    updateUITexts();
+                    checkInitialStatus();
+                });
+        }
 
+        if (window.pywebview && window.pywebview.api) {
+            onPywebviewReady();
+        } else {
+            window.addEventListener('pywebviewready', onPywebviewReady);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded');
+            updateUITexts();
+        });
     </script>
 </body>
 </html>
