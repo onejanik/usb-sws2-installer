@@ -433,4 +433,4 @@ if __name__ == '__main__':
         hidden=True
     )
 
-    webview.start(on_loaded, debug=True)
+    webview.start(on_loaded, debug=False)
