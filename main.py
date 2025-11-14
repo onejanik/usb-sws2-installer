@@ -407,13 +407,7 @@ class Api:
                 print(f"Error sending JS update: {e}")
 
 def on_loaded():
-    print("Main window loaded. Showing window and starting status check.")
     api.set_window(main_window)
-    if splash_window:
-        try:
-            splash_window.destroy()
-        except:
-            pass
     main_window.show()
 
     def delayed_status_check():
@@ -426,15 +420,7 @@ def on_loaded():
 if __name__ == '__main__':
     api = Api()
 
-    splash_window = webview.create_window(
-        'Loading...',
-        'splash.html',
-        width=400,
-        height=300,
-        frameless=True,
-        on_top=True,
-        resizable=False
-    )
+
 
     main_window = webview.create_window(
         'SubwaySim2 USB Installer v1.0 Beta',
