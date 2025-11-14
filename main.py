@@ -35,7 +35,51 @@ STATUS_FILE = "mod_status.json"
 
 DOWNLOAD_CHUNK_SIZE = 8192
 DOWNLOAD_TIMEOUT = 60
-DOWNLOAD_PROGRESS_INTERVAL = 4.0
+DOWNLOAD_PROGRESS_INTERVAL = 2.0
+
+INSTALLER_VERSION = "1.0"
+INSTALLER_UPDATE_INFO_URL = "https://onejanik.xyz/sws2_usb_installer/version.json"
+
+DEFAULT_LANGUAGE = "de"
+
+MESSAGES = {
+    "de": {
+        "no_game_folder": "Kein Spielordner ausgewählt oder gefunden.",
+        "installation_already_running": "Eine Installation läuft bereits.",
+        "creating_mods_folder": "Mods-Ordner wird erstellt...",
+        "creating_backup": "Backup des vorhandenen Mods wird erstellt...",
+        "primary_download_failed": "Primärer Download fehlgeschlagen, versuche Spiegelserver...",
+        "starting_download_from_server": "Starte Download von Server {server}...",
+        "download_started": "Download gestartet ({size_mb} MB)",
+        "downloading_from_server_percent": "Lade von Server {server}... {percent}%",
+        "downloading_from_server_mb": "Lade von Server {server}... {mb} MB",
+        "download_failed_both_servers": "Download von beiden Servern fehlgeschlagen. Letzter Fehler: {error}",
+        "download_could_not_be_completed": "Download konnte nicht abgeschlossen werden.",
+        "download_complete_install": "Download abgeschlossen. Mod wird installiert...",
+        "installation_complete_saving": "Installation abgeschlossen. Version wird gespeichert...",
+        "installation_failed": "Installation fehlgeschlagen: {error}",
+        "restoring_backup": "Installation abgebrochen. Ursprüngliche Dateien werden wiederhergestellt...",
+        "cleanup_temp": "Temporäre Dateien werden aufgeräumt..."
+    },
+    "en": {
+        "no_game_folder": "No game folder selected or found.",
+        "installation_already_running": "Installation is already running.",
+        "creating_mods_folder": "Creating mods folder...",
+        "creating_backup": "Creating backup of existing mod...",
+        "primary_download_failed": "Primary download failed, trying mirror...",
+        "starting_download_from_server": "Starting download from server {server}...",
+        "download_started": "Download started ({size_mb} MB)",
+        "downloading_from_server_percent": "Downloading from server {server}... {percent}%",
+        "downloading_from_server_mb": "Downloading from server {server}... {mb} MB",
+        "download_failed_both_servers": "Download failed from both servers. Last error: {error}",
+        "download_could_not_be_completed": "Download could not be completed.",
+        "download_complete_install": "Download complete. Installing mod...",
+        "installation_complete_saving": "Installation complete. Saving version...",
+        "installation_failed": "Installation failed: {error}",
+        "restoring_backup": "Installation cancelled. Restoring original files...",
+        "cleanup_temp": "Cleaning up temporary files..."
+    }
+}
 
 
 class Api:
@@ -45,9 +89,39 @@ class Api:
         self.installation_cancelled = False
         self.install_thread = None
         self.backup_file_path = None
+        self.language = DEFAULT_LANGUAGE
+
+    def _msg(self, key, **kwargs):
+        lang = self.language or DEFAULT_LANGUAGE
+        lang_dict = MESSAGES.get(lang, MESSAGES.get(DEFAULT_LANGUAGE, {}))
+        template = lang_dict.get(key) or MESSAGES.get("en", {}).get(key) or key
+        try:
+            return template.format(**kwargs)
+        except Exception:
+            return template
+
+    def _compare_versions(self, v1, v2):
+        def norm(v):
+            return [int(x) for x in str(v).split(".")]
+        a = norm(v1)
+        b = norm(v2)
+        max_len = max(len(a), len(b))
+        a += [0] * (max_len - len(a))
+        b += [0] * (max_len - len(b))
+        if a > b:
+            return 1
+        if a < b:
+            return -1
+        return 0
 
     def set_window(self, window):
         self.window = window
+
+    def set_language(self, language):
+        if language not in MESSAGES:
+            language = DEFAULT_LANGUAGE
+        self.language = language
+        return {"success": True, "language": self.language}
 
     def get_status(self):
         game_folder = self._find_game_folder()
@@ -109,7 +183,11 @@ class Api:
 
             folder_path = Path(result[0])
             if folder_path.name != GAME_DIR_NAME:
-                self._send_js_update("showAlert", f"Wrong folder selected. Please select the folder named \"{GAME_DIR_NAME}\".")
+                self._send_js_update(
+                    "showAlert",
+                    "Wrong folder selected. Please select the folder named \"{}\".".format(GAME_DIR_NAME),
+                    "danger"
+                )
                 return {"error": "Wrong folder name."}
 
             self.selected_game_folder = folder_path
@@ -131,12 +209,16 @@ class Api:
             return {"update_available": False, "local": local_version, "remote": remote_version}
 
     def install_mod(self):
+        if not self.selected_game_folder or not self.selected_game_folder.exists():
+            self.selected_game_folder = self._find_game_folder()
+
         if not self.selected_game_folder:
-            self._send_js_update("showErrorView", "No game folder selected or found.")
-            return {"error": "No game folder selected or found."}
+            msg = self._msg("no_game_folder")
+            self._send_js_update("showErrorView", msg)
+            return {"error": msg}
 
         if self.install_thread and self.install_thread.is_alive():
-            return {"error": "Installation is already running."}
+            return {"error": self._msg("installation_already_running")}
 
         self.installation_cancelled = False
         self.install_thread = threading.Thread(target=self._do_install_task, daemon=True)
@@ -192,6 +274,77 @@ class Api:
         self.installation_cancelled = True
         if self.window:
             self.window.destroy()
+
+    def check_installer_update(self):
+        try:
+            resp = requests.get(INSTALLER_UPDATE_INFO_URL, timeout=10)
+            resp.raise_for_status()
+            info = resp.json()
+
+            remote_version = str(info.get("version", "")).strip()
+            download_url = info.get("url")
+
+            if not remote_version or not download_url:
+                return {
+                    "error": True,
+                    "message": "Invalid update info from server."
+                }
+
+            cmp = self._compare_versions(remote_version, INSTALLER_VERSION)
+
+            if cmp > 0:
+                return {
+                    "update_available": True,
+                    "local": INSTALLER_VERSION,
+                    "remote": remote_version,
+                    "url": download_url
+                }
+            else:
+                return {
+                    "update_available": False,
+                    "local": INSTALLER_VERSION,
+                    "remote": remote_version
+                }
+        except Exception as e:
+            return {
+                "error": True,
+                "message": f"Error checking installer update: {e}"
+            }
+
+    def update_installer(self, download_url, filename=None):
+        if not download_url:
+            return {"error": True, "message": "No download URL provided."}
+
+        try:
+            if filename is None:
+                filename = os.path.basename(download_url) or "installer_new.exe"
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                tmp_path = Path(tmpdir) / filename
+
+                with requests.get(download_url, stream=True, timeout=60) as r:
+                    r.raise_for_status()
+                    with open(tmp_path, "wb") as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            if not chunk:
+                                continue
+                            f.write(chunk)
+
+                if os.name == "nt":
+                    subprocess.Popen(
+                        ["start", "", str(tmp_path)],
+                        shell=True
+                    )
+                else:
+                    subprocess.Popen(
+                        ["xdg-open", str(tmp_path)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL
+                    )
+
+            os._exit(0)
+        except Exception as e:
+            return {"error": True, "message": f"Error updating installer: {e}"}
 
     def _find_game_folder(self):
         if self.selected_game_folder and self.selected_game_folder.exists():
@@ -274,9 +427,11 @@ class Api:
     def _restore_backup(self):
         if self.backup_file_path and self.backup_file_path.exists():
             try:
+                self._send_js_update("updateProgress", -1, self._msg("restoring_backup"), 0, 0)
                 original_path = self.backup_file_path.parent / FILE_NAME
                 shutil.move(self.backup_file_path, original_path)
                 print("Backup restored")
+                self.backup_file_path = None
                 return True
             except Exception as e:
                 print(f"Error restoring backup: {e}")
@@ -289,6 +444,7 @@ class Api:
                 print("Backup deleted")
             except Exception as e:
                 print(f"Error deleting backup: {e}")
+        self.backup_file_path = None
 
     def _do_install_task(self):
         tmp_file_path = None
@@ -299,7 +455,7 @@ class Api:
                 return
 
             mods_folder = self.selected_game_folder / MODS_DIR_NAME
-            self._send_js_update("updateProgress", 0, f"Creating folder if needed: {mods_folder.name}")
+            self._send_js_update("updateProgress", 0, self._msg("creating_mods_folder"), 0, 0)
             mods_folder.mkdir(exist_ok=True)
 
             if self.installation_cancelled:
@@ -309,7 +465,7 @@ class Api:
             target_file_path = mods_folder / FILE_NAME
 
             if target_file_path.exists():
-                self._send_js_update("updateProgress", 5, "Creating backup of existing mod...")
+                self._send_js_update("updateProgress", 5, self._msg("creating_backup"), 0, 0)
                 backup_created = self._backup_existing_mod(mods_folder)
 
             download_successful = False
@@ -323,9 +479,15 @@ class Api:
 
                 try:
                     if attempt == 2:
-                        self._send_js_update("updateProgress", -1, "Primary download failed, trying mirror...")
+                        self._send_js_update("updateProgress", -1, self._msg("primary_download_failed"), 0, 0)
 
-                    self._send_js_update("updateProgress", -1, f"Starting download from server {attempt}...")
+                    self._send_js_update(
+                        "updateProgress",
+                        -1,
+                        self._msg("starting_download_from_server", server=attempt),
+                        0,
+                        0
+                    )
 
                     with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
                         tmp_file_path = tmp_file.name
@@ -338,10 +500,11 @@ class Api:
                             last_ui_update = 0.0
 
                             if total_size > 0:
+                                size_mb = total_size // 1024**2
                                 self._send_js_update(
                                     "updateProgress",
                                     10,
-                                    f"Download started ({total_size // 1024**2} MB)",
+                                    self._msg("download_started", size_mb=size_mb),
                                     0,
                                     total_size
                                 )
@@ -377,15 +540,24 @@ class Api:
                                     self._send_js_update(
                                         "updateProgress",
                                         download_percent,
-                                        f"Downloading from server {attempt}... {percent_total}%",
+                                        self._msg(
+                                            "downloading_from_server_percent",
+                                            server=attempt,
+                                            percent=percent_total
+                                        ),
                                         downloaded,
                                         total_size
                                     )
                                 else:
+                                    mb = downloaded // 1024**2
                                     self._send_js_update(
                                         "updateProgress",
                                         -1,
-                                        f"Downloading from server {attempt}... {downloaded // 1024**2} MB",
+                                        self._msg(
+                                            "downloading_from_server_mb",
+                                            server=attempt,
+                                            mb=mb
+                                        ),
                                         downloaded,
                                         downloaded * 2
                                     )
@@ -407,12 +579,12 @@ class Api:
                     else:
                         if backup_created:
                             self._restore_backup()
-                        raise Exception(f"Download failed from both servers. Last error: {e}")
+                        raise Exception(self._msg("download_failed_both_servers", error=str(e)))
 
             if not download_successful:
                 if backup_created:
                     self._restore_backup()
-                raise Exception("Download could not be completed")
+                raise Exception(self._msg("download_could_not_be_completed"))
 
             if self.installation_cancelled:
                 if backup_created:
@@ -420,14 +592,14 @@ class Api:
                 self._send_js_update("installCancelled")
                 return
 
-            self._send_js_update("updateProgress", 95, "Download complete. Installing mod...")
+            self._send_js_update("updateProgress", 95, self._msg("download_complete_install"), 0, 0)
             shutil.move(tmp_file_path, target_file_path)
             tmp_file_path = None
 
             if backup_created:
                 self._cleanup_backup()
 
-            self._send_js_update("updateProgress", 100, "Installation complete. Saving version...")
+            self._send_js_update("updateProgress", 100, self._msg("installation_complete_saving"), 0, 0)
             latest_version = self._scrape_website_version()
             if not latest_version:
                 latest_version = "Unknown"
@@ -439,13 +611,15 @@ class Api:
             print(f"Installation error: {e}")
             if backup_created:
                 self._restore_backup()
-            self._send_js_update("installComplete", False, f"Error: {str(e)}")
+            self._send_js_update("installComplete", False, self._msg("installation_failed", error=str(e)))
         finally:
             if tmp_file_path and os.path.exists(tmp_file_path):
                 try:
+                    self._send_js_update("updateProgress", -1, self._msg("cleanup_temp"), 0, 0)
                     os.remove(tmp_file_path)
                 except OSError:
                     pass
+            self.installation_cancelled = False
 
     def _set_local_version(self, mods_folder, version_string):
         status_file_path = self._get_status_file_path(mods_folder)
@@ -468,22 +642,34 @@ class Api:
                 print(f"Error sending JS update: {e}")
 
 
-def on_loaded():
-    api.set_window(main_window)
-    main_window.show()
-
-
 if __name__ == '__main__':
     api = Api()
 
     main_window = webview.create_window(
         'SubwaySim2 USB Installer v1.0 Beta',
         'index.html',
-        js_api=api,
         width=800,
         height=600,
-        resizable=False,
-        hidden=True
+        resizable=False
     )
 
-    webview.start(on_loaded, debug=False)
+    def expose_api(window):
+        window.expose(
+            api.get_status,
+            api.select_game_folder,
+            api.check_for_update,
+            api.install_mod,
+            api.cancel_installation,
+            api.launch_game,
+            api.open_url,
+            api.get_settings,
+            api.save_settings,
+            api.set_language,
+            api.close_app,
+            api.check_installer_update,
+            api.update_installer
+        )
+        api.set_window(window)
+        print("API functions exposed")
+
+    webview.start(expose_api, main_window, debug=False)
