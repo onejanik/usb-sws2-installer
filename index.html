@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html data-bs-theme="dark" lang="de">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no">
+    <title>SubwaySim2 USB Installer</title>
+    <link rel="stylesheet" href="./assets/css/bootstrap.min.css">
+    <link rel="stylesheet" href="./assets/css/all.min.css">
+
+    <style>
+        @font-face {
+            font-family: 'Font Awesome 6 Free';
+            font-style: normal;
+            font-weight: 900;
+            src: url('./assets/fonts/fa-solid-900.woff2') format('woff2'),
+                 url('./assets/fonts/fa-solid-900.ttf') format('truetype');
+        }
+
+        @font-face {
+            font-family: 'Font Awesome 6 Free';
+            font-style: normal;
+            font-weight: 400;
+            src: url('./assets/fonts/fa-regular-400.woff2') format('woff2'),
+                 url('./assets/fonts/fa-regular-400.ttf') format('truetype');
+        }
+
+        @font-face {
+            font-family: 'Font Awesome 6 Brands';
+            font-style: normal;
+            font-weight: 400;
+            src: url('./assets/fonts/fa-brands-400.woff2') format('woff2'),
+                 url('./assets/fonts/fa-brands-400.ttf') format('truetype');
+        }
+
+        .fas, .fa-solid {
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+        }
+        .far, .fa-regular {
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 400;
+        }
+        .fab, .fa-brands {
+            font-family: 'Font Awesome 6 Brands';
+            font-weight: 400;
+        }
+
+        body {
+            background-color: rgb(25, 25, 25);
+            color: #eee;
+            user-select: none;
+        }
+
+        .bg-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            z-index: -1;
+            background-image: url('./assets/img/background.png');
+            background-size: cover;
+            background-position: center;
+            filter: blur(8px);
+            opacity: 0.3;
+        }
+
+        .main-content {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 700px;
+        }
+
+        .console {
+            background-color: #333;
+            color: #ccc;
+            font-family: monospace;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+            border: 2px solid #555;
+            white-space: pre-wrap;
+            overflow-y: auto;
+            height: 150px;
+            text-align: left;
+        }
+
+        .console-line {
+            margin-bottom: 2px;
+        }
+
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 1em;
+            font-weight: 500;
+            display: inline-block;
+            min-width: 200px;
+        }
+
+        .bg-success { background-color: #198754 !important; }
+        .bg-danger { background-color: #dc3545 !important; }
+        .bg-warning { background-color: #fd7e14 !important; }
+
+        .download-stat {
+            padding: 8px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            margin: 2px;
+        }
+
+        .download-stat small {
+            display: block;
+            margin-bottom: 4px;
+            opacity: 0.8;
+        }
+
+        .app-view {
+            display: none;
+        }
+
+        .app-view.active {
+            display: block;
+        }
+
+        .top-controls {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+        }
+
+        .settings-panel {
+            position: absolute;
+            top: 60px;
+            right: 15px;
+            background: rgba(40, 40, 40, 0.98);
+            border: 1px solid #555;
+            border-radius: 8px;
+            padding: 20px;
+            min-width: 300px;
+            display: none;
+            z-index: 1001;
+        }
+
+        .lang-btn.active {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-container"></div>
+
+    <div class="top-controls">
+        <button onclick="openGitHub()" class="btn btn-outline-secondary btn-sm" type="button" title="Bug Reports">
+            <i class="fab fa-github"></i>
+        </button>
+        <button onclick="toggleSettings()" class="btn btn-outline-secondary btn-sm" type="button" title="Settings">
+            <i class="fas fa-cog"></i>
+        </button>
+        <button id="lang-de" onclick="setLanguage('de')" class="btn btn-sm btn-outline-secondary lang-btn active" type="button">🇩🇪</button>
+        <button id="lang-en" onclick="setLanguage('en')" class="btn btn-sm btn-outline-secondary lang-btn" type="button">🇺🇸</button>
+    </div>
+
+    <div id="settings-panel" class="settings-panel">
+        <h5 data-i18n="settings">Einstellungen</h5>
+        <hr>
+        <div class="mb-3">
+        </div>
+        <div class="mb-3">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="sound-toggle" checked onchange="toggleSound()">
+                <label class="form-check-label" for="sound-toggle" data-i18n="enable_sound">
+                    Erfolgssound aktivieren
+                </label>
+            </div>
+        </div>
+        <button onclick="toggleSettings()" class="btn btn-secondary btn-sm" data-i18n="close">Schließen</button>
+    </div>
+
+    <div class="container text-center main-content">
+
+        <div id="loading-view" class="app-view active">
+            <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <h3 class="mt-3" data-i18n="loading">Status wird geprüft...</h3>
+        </div>
+
+        <div id="main-view" class="app-view">
+            <img class="rounded mb-3" src="./assets/img/icon.png"
+                 alt="Logo" width="100" height="100"
+                 onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgZmlsbD0iIzMzMyIvPjx0ZXh0IHg9IjUwIiB5PSI1NSIgZmlsbD0iI2NjYyIgZm9udC1zaXplPSIxNCIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TE9HTzwvdGV4dD48L3N2Zz4=';">
+            <h1 data-i18n="app_title">U-Bahn Sim Berlin Installer</h1>
+            <p class="text-muted mb-4"><small data-i18n="version">v1.0 Beta</small></p>
+
+            <div class="mb-4">
+                <span id="status-version" class="status-badge bg-warning" data-i18n="loading_status">Wird geladen...</span>
+                <div id="game-path-status" class="text-muted mt-2" style="font-size: 0.9em; display: none;">
+                    <i class="fas fa-folder"></i> <span data-i18n="game_found">Spiel gefunden</span>
+                </div>
+            </div>
+
+            <div class="container d-grid gap-3" style="margin-top: 40px;">
+                <button id="select-folder-button" onclick="selectPath()"
+                        class="btn btn-info btn-lg rounded-pill p-3" type="button" style="display: none;">
+                    <i class="fas fa-folder-open"></i> <span data-i18n="select_folder">Spielordner auswählen</span>
+                </button>
+
+                <button id="btn-install" onclick="startInstall()"
+                        class="btn btn-primary rounded-pill p-3" type="button" disabled>
+                    <i class="fas fa-download"></i> <span data-i18n="install_now">Jetzt Installieren</span>
+                </button>
+                <button id="btn-update" onclick="checkUpdate()"
+                        class="btn btn-warning rounded-pill p-3" type="button" disabled>
+                    <i class="fas fa-sync-alt"></i> <span data-i18n="update_now">Jetzt Updaten</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="progress-view" class="app-view">
+            <h1 data-i18n="downloading">Lade Assets herunter...</h1>
+            <h4 id="progress-text">Starte Prozess...</h4>
+
+            <div class="progress border rounded shadow-lg" style="margin-top: 35px; height: 30px;">
+                <div id="progress-bar" class="progress-bar bg-primary progress-bar-animated progress-bar-striped"
+                     role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%;">
+                    0%
+                </div>
+            </div>
+
+            <div class="row mt-3 text-center">
+                <div class="col-4">
+                    <div class="download-stat">
+                        <small class="text-muted" data-i18n="speed">Geschwindigkeit</small>
+                        <div id="download-speed" class="fw-bold">-- KB/s</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="download-stat">
+                        <small class="text-muted" data-i18n="time_remaining">Verbleibende Zeit</small>
+                        <div id="download-eta" class="fw-bold">--:--</div>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="download-stat">
+                        <small class="text-muted" data-i18n="file_size">Dateigröße</small>
+                        <div id="file-size" class="fw-bold">-- MB</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-3">
+                <button id="console-toggle" onclick="toggleConsole()" class="btn btn-outline-secondary btn-sm" type="button">
+                    <i class="fas fa-terminal"></i> <span data-i18n="console_show">Log anzeigen</span>
+                </button>
+                <button id="cancel-button" onclick="cancelInstallation()" class="btn btn-outline-danger btn-sm ms-2" type="button">
+                    <i class="fas fa-times"></i> <span data-i18n="cancel_installation">Installation abbrechen</span>
+                </button>
+            </div>
+
+            <div id="progress-console" class="console" style="display: none;">
+                Starte Prozess...<br>
+            </div>
+        </div>
+
+        <div id="success-view" class="app-view">
+            <i class="fas fa-check-circle text-success" style="font-size: 100px;"></i>
+            <h3 class="mt-3" data-i18n="installation_successful">Installation erfolgreich!</h3>
+            <p id="success-message" class="text-success mt-3"></p>
+            <div class="mt-4">
+                <button onclick="launchGame()" class="btn btn-success rounded-pill p-3 me-3" type="button">
+                    <i class="fas fa-play"></i> <span data-i18n="launch_game">Spiel starten</span>
+                </button>
+                <button onclick="showMainView();" class="btn btn-secondary rounded-pill p-3" type="button">
+                    <i class="fas fa-arrow-left"></i> <span data-i18n="back_to_start">Zurück zum Start</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="cancelled-view" class="app-view">
+            <i class="fas fa-ban text-warning" style="font-size: 100px;"></i>
+            <h3 class="mt-3" data-i18n="installation_cancelled">Installation abgebrochen</h3>
+            <p class="text-muted mt-3" data-i18n="cancelled_text">Der Download wurde vom Benutzer abgebrochen.</p>
+            <button onclick="showMainView();" class="btn btn-secondary rounded-pill p-3 mt-4" type="button">
+                <i class="fas fa-arrow-left"></i> <span data-i18n="back_to_start">Zurück zum Start</span>
+            </button>
+        </div>
+
+        <div id="error-view" class="app-view">
+            <i class="fas fa-exclamation-triangle text-danger" style="font-size: 100px;"></i>
+            <h3 class="mt-3" data-i18n="error_occurred">Leider ist etwas schiefgelaufen.</h3>
+            <div>
+                <p data-i18n="error_label">Fehler:</p>
+                <p id="error-message" class="text-danger-emphasis bg-dark-subtle p-3 rounded"></p>
+            </div>
+            <button onclick="showMainView();" class="btn btn-secondary rounded-pill p-3 mt-4" type="button">
+                <i class="fas fa-arrow-left"></i> <span data-i18n="back_to_start">Zurück zum Start</span>
+            </button>
+        </div>
+
+    </div>
+
+    <script src="./assets/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        const translations = {
+            'de': {
+                'app_title': 'U-Bahn Sim Berlin Installer',
+                'version': 'v1.0 Beta',
+                'loading': 'Status wird geprüft...',
+                'loading_status': 'Wird geladen...',
+                'game_found': 'Spiel gefunden',
+                'not_installed': 'Nicht installiert',
+                'installed': 'Installiert',
+                'game_folder_not_found': 'Spielordner nicht gefunden',
+                'select_folder': 'Spielordner auswählen',
+                'install_now': 'Jetzt Installieren',
+                'update_now': 'Jetzt Updaten',
+                'repair': 'Reparieren',
+                'current': 'Aktuell',
+                'update_available': 'Update verfügbar!',
+                'check_update': 'Update prüfen',
+                'console_show': 'Log anzeigen',
+                'console_hide': 'Log verstecken',
+                'cancel_installation': 'Installation abbrechen',
+                'canceling': 'Wird abgebrochen...',
+                'installation_cancelled': 'Installation abgebrochen',
+                'cancelled_text': 'Der Download wurde vom Benutzer abgebrochen.',
+                'back_to_start': 'Zurück zum Start',
+                'error_occurred': 'Leider ist etwas schiefgelaufen.',
+                'error_label': 'Fehler:',
+                'installation_successful': 'Installation erfolgreich!',
+                'launch_game': 'Spiel starten',
+                'downloading': 'Lade Assets herunter...',
+                'speed': 'Geschwindigkeit',
+                'time_remaining': 'Verbleibende Zeit',
+                'file_size': 'Dateigröße',
+                'settings': 'Einstellungen',
+                'enable_sound': 'Erfolgssound aktivieren',
+                'close': 'Schließen',
+                'confirm_cancel': 'Möchten Sie die Installation wirklich abbrechen?'
+            },
+            'en': {
+                'app_title': 'U-Bahn Sim Berlin Installer',
+                'version': 'v1.0 Beta',
+                'loading': 'Checking status...',
+                'loading_status': 'Loading...',
+                'game_found': 'Game found',
+                'not_installed': 'Not installed',
+                'installed': 'Installed',
+                'game_folder_not_found': 'Game folder not found',
+                'select_folder': 'Select game folder',
+                'install_now': 'Install Now',
+                'update_now': 'Update Now',
+                'repair': 'Repair',
+                'current': 'Current',
+                'update_available': 'Update available!',
+                'check_update': 'Check update',
+                'console_show': 'Show Log',
+                'console_hide': 'Hide Log',
+                'cancel_installation': 'Cancel installation',
+                'canceling': 'Canceling...',
+                'installation_cancelled': 'Installation Cancelled',
+                'cancelled_text': 'The download was cancelled by the user.',
+                'back_to_start': 'Back to start',
+                'error_occurred': 'Unfortunately, something went wrong.',
+                'error_label': 'Error:',
+                'installation_successful': 'Installation successful!',
+                'launch_game': 'Launch Game',
+                'downloading': 'Downloading Assets...',
+                'speed': 'Speed',
+                'time_remaining': 'Time Remaining',
+                'file_size': 'File Size',
+                'settings': 'Settings',
+                'enable_sound': 'Enable success sound',
+                'close': 'Close',
+                'confirm_cancel': 'Do you really want to cancel the installation?'
+            }
+        };
+
+        let currentLang = 'de'; // Will be loaded from settings
+        let currentStatus = null;
+        let downloadStartTime = null;
+        let lastUpdateTime = null;
+        let lastDownloadedBytes = 0;
+        let settings = {
+            sound: true,
+            language: 'de'
+        };
+
+        // Load settings on startup
+        async function loadSettings() {
+            try {
+                const loadedSettings = await pywebview.api.get_settings();
+                settings = { ...settings, ...loadedSettings };
+                currentLang = settings.language;
+
+                // Update UI based on loaded settings
+                document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+                document.getElementById('lang-' + currentLang).classList.add('active');
+
+
+                document.getElementById('sound-toggle').checked = settings.sound;
+            } catch (e) {
+                console.log('Could not load settings, using defaults:', e);
+            }
+        }
+
+        // Save settings
+        async function saveSettings() {
+            try {
+                await pywebview.api.save_settings(settings);
+            } catch (e) {
+                console.log('Could not save settings:', e);
+            }
+        }
+
+        function t(key) {
+            return translations[currentLang][key] || translations['de'][key] || key;
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            settings.language = lang;
+            saveSettings();
+
+            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('lang-' + lang).classList.add('active');
+
+            updateUITexts();
+            // Don't reset status when changing language - keep current status
+            if (currentStatus) {
+                updateStatusUI(currentStatus);
+            }
+        }
+
+        function updateUITexts() {
+            document.querySelectorAll('[data-i18n]').forEach(element => {
+                const key = element.getAttribute('data-i18n');
+                element.textContent = t(key);
+            });
+
+            updateButtonTexts();
+        }
+
+        function updateButtonTexts() {
+            const consoleBtn = document.getElementById('console-toggle');
+            const cancelBtn = document.getElementById('cancel-button');
+
+            if (consoleBtn && consoleBtn.querySelector('span')) {
+                const span = consoleBtn.querySelector('span');
+                if (span.textContent.includes('anzeigen') || span.textContent.includes('Show')) {
+                    span.textContent = t('console_show');
+                } else {
+                    span.textContent = t('console_hide');
+                }
+            }
+
+            if (cancelBtn && !cancelBtn.disabled) {
+                const span = cancelBtn.querySelector('span');
+                if (span) span.textContent = t('cancel_installation');
+            }
+        }
+
+        function toggleSettings() {
+            const panel = document.getElementById('settings-panel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+
+
+            document.getElementById('sound-toggle').checked = settings.sound;
+        }
+
+        function toggleSound() {
+            settings.sound = document.getElementById('sound-toggle').checked;
+            saveSettings();
+        }
+
+        function openGitHub() {
+            pywebview.api.open_url('https://github.com/onejanik/usb-sws2-installer');
+        }
+
+        function playSuccessSound() {
+            if (!settings.sound) return;
+
+            try {
+                const audio = new Audio('./assets/audio/success.mp3');
+                audio.volume = 0.5;
+                audio.play().catch(e => {
+                    console.log('Sound playback failed:', e);
+                });
+            } catch (e) {
+                console.log('Sound playback not available:', e);
+            }
+        }
+
+
+        function toggleConsole() {
+            const console = document.getElementById('progress-console');
+            const button = document.getElementById('console-toggle');
+            const span = button.querySelector('span');
+
+            if (console.style.display === 'none') {
+                console.style.display = 'block';
+                span.textContent = t('console_hide');
+            } else {
+                console.style.display = 'none';
+                span.textContent = t('console_show');
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        function formatTime(seconds) {
+            if (seconds === Infinity || isNaN(seconds)) return '--:--';
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+
+            if (hours > 0) {
+                return `${hours}h ${minutes}m`;
+            } else if (minutes > 0) {
+                return `${minutes}:${secs.toString().padStart(2, '0')}`;
+            } else {
+                return `${secs}s`;
+            }
+        }
+
+        function setView(viewId) {
+            console.log(`Switching to view: ${viewId}`);
+            document.querySelectorAll('.app-view').forEach(view => {
+                view.classList.remove('active');
+            });
+            const targetView = document.getElementById(viewId);
+            if (targetView) {
+                targetView.classList.add('active');
+            } else {
+                console.error(`View with ID '${viewId}' not found!`);
+            }
+        }
+
+        async function checkInitialStatus() {
+            console.log("checkInitialStatus called");
+            setView('loading-view');
+
+            let attempts = 0;
+            const maxAttempts = 10;
+
+            while (attempts < maxAttempts) {
+                try {
+                    if (typeof pywebview !== 'undefined' && pywebview.api && typeof pywebview.api.get_status === 'function') {
+                        console.log("API available, loading status...");
+                        const status = await pywebview.api.get_status();
+                        console.log("Status received from Python:", status);
+                        updateStatusUI(status);
+                        setView('main-view');
+                        return;
+                    }
+                } catch (e) {
+                    console.log(`API call failed (attempt ${attempts + 1}):`, e);
+                }
+
+                attempts++;
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+
+            console.error("API not available after multiple attempts");
+            showErrorView("Error: Application API could not be loaded. Please restart the application.");
+        }
+
+        async function selectPath() {
+            try {
+                const status = await pywebview.api.select_game_folder();
+                if (status && !status.error) {
+                    updateStatusUI(status);
+                } else if (status && status.error) {
+                    console.warn("Path selection error:", status.error);
+                    showAlert(`Path selection error: ${status.error}`, 'danger');
+                }
+            } catch (e) {
+                showAlert(`Error selecting folder: ${e.message}`, 'danger');
+            }
+        }
+
+        function startInstall() {
+            if (currentStatus && currentStatus.error && currentStatus.path_required) {
+                selectPath();
+                return;
+            }
+
+            setView('progress-view');
+
+            downloadStartTime = Date.now();
+            lastUpdateTime = Date.now();
+            lastDownloadedBytes = 0;
+
+            document.getElementById('progress-console').innerHTML = '<div class="console-line">Installation starting...</div>';
+            document.getElementById('progress-console').style.display = 'none';
+            document.getElementById('console-toggle').querySelector('span').textContent = t('console_show');
+            document.getElementById('progress-bar').style.width = '0%';
+            document.getElementById('progress-bar').textContent = '0%';
+            document.getElementById('progress-text').textContent = 'Installation starting...';
+            document.getElementById('download-speed').textContent = '-- KB/s';
+            document.getElementById('download-eta').textContent = '--:--';
+            document.getElementById('file-size').textContent = '-- MB';
+            document.getElementById('cancel-button').style.display = 'inline-block';
+            document.getElementById('cancel-button').querySelector('span').textContent = t('cancel_installation');
+
+
+            pywebview.api.install_mod();
+        }
+
+        function cancelInstallation() {
+            if (confirm(t('confirm_cancel'))) {
+                document.getElementById('cancel-button').disabled = true;
+                document.getElementById('cancel-button').innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${t('canceling')}`;
+
+                pywebview.api.cancel_installation();
+            }
+        }
+
+        async function launchGame() {
+            try {
+                const result = await pywebview.api.launch_game();
+                if (result.success) {
+                    showAlert(result.message, 'success');
+
+                } else {
+                    showAlert(result.message, 'error');
+                }
+            } catch (e) {
+                showAlert(`Error launching game: ${e.message}`, 'error');
+            }
+        }
+
+        function updateStatusUI(status) {
+            currentStatus = status;
+            const versionEl = document.getElementById('status-version');
+            const gamePathStatusEl = document.getElementById('game-path-status');
+            const btnUpdate = document.getElementById('btn-update');
+            const btnInstall = document.getElementById('btn-install');
+            const selectFolderBtn = document.getElementById('select-folder-button');
+
+            if (status.error) {
+                versionEl.textContent = t('game_folder_not_found');
+                versionEl.className = 'status-badge bg-danger';
+                gamePathStatusEl.style.display = 'none';
+                btnUpdate.disabled = true;
+                btnInstall.disabled = false;
+                btnInstall.innerHTML = `<i class="fas fa-folder-open"></i> ${t('select_folder')}`;
+
+                if (status.path_required) {
+                    selectFolderBtn.style.display = 'block';
+                }
+            } else {
+                gamePathStatusEl.style.display = 'block';
+                selectFolderBtn.style.display = 'none';
+                btnInstall.disabled = false;
+
+                if (status.installed) {
+                    versionEl.textContent = `${t('installed')}: ${status.local_version || "Unknown"}`;
+                    versionEl.className = 'status-badge bg-success';
+                    btnInstall.innerHTML = `<i class="fas fa-wrench"></i> ${t('repair')}`;
+
+                    checkUpdateAvailability(status.local_version);
+                } else {
+                    versionEl.textContent = t('not_installed');
+                    versionEl.className = 'status-badge bg-warning';
+                    btnUpdate.disabled = true;
+                    btnUpdate.innerHTML = `<i class="fas fa-sync-alt"></i> ${t('update_now')}`;
+                    btnUpdate.className = "btn btn-warning rounded-pill p-3";
+                    btnInstall.innerHTML = `<i class="fas fa-download"></i> ${t('install_now')}`;
+                }
+            }
+        }
+
+        async function checkUpdateAvailability(localVersion) {
+            const btnUpdate = document.getElementById('btn-update');
+            try {
+                const result = await pywebview.api.check_for_update(localVersion);
+                if (result.update_available) {
+                    btnUpdate.disabled = false;
+                    btnUpdate.innerHTML = `<i class="fas fa-arrow-up"></i> ${t('update_available')}`;
+                    btnUpdate.className = "btn btn-success rounded-pill p-3";
+                } else if (!result.error) {
+                    btnUpdate.disabled = true;
+                    btnUpdate.innerHTML = `<i class="fas fa-check"></i> ${t('current')}`;
+                    btnUpdate.className = "btn btn-outline-secondary rounded-pill p-3";
+                } else {
+                    btnUpdate.disabled = false;
+                    btnUpdate.innerHTML = `<i class="fas fa-sync-alt"></i> ${t('check_update')}`;
+                    btnUpdate.className = "btn btn-warning rounded-pill p-3";
+                }
+            } catch (e) {
+                console.warn("Error checking update availability:", e);
+                btnUpdate.disabled = false;
+                btnUpdate.innerHTML = `<i class="fas fa-sync-alt"></i> ${t('update_now')}`;
+                btnUpdate.className = "btn btn-warning rounded-pill p-3";
+            }
+        }
+
+        async function checkUpdate() {
+            if (!currentStatus || !currentStatus.installed) return;
+            try {
+                const result = await pywebview.api.check_for_update(currentStatus.local_version);
+                if (result.update_available) {
+                    const install = confirm(`${t('update_available')}\n\nLocal: ${result.local}\nRemote: ${result.remote}\n\nDownload and install now?`);
+                    if (install) {
+                        startInstall();
+                    }
+                } else if (result.error) {
+                    if (result.force_install) {
+                        const install = confirm(`${result.message}\n\nReinstall now?`);
+                        if (install) startInstall();
+                    } else {
+                        showAlert(result.message, 'danger');
+                    }
+                } else {
+                    showAlert('You already have the latest version.', 'success');
+                }
+            } catch (e) {
+                showAlert(`Error checking for updates: ${e.message}`, 'danger');
+            }
+        }
+
+        function showMainView() {
+            setView('main-view');
+            checkInitialStatus();
+        }
+
+        function updateProgress(percent, message, downloadedBytes = 0, totalBytes = 0) {
+            console.log(`Progress: ${percent}% - ${message}`);
+            const bar = document.getElementById('progress-bar');
+            const text = document.getElementById('progress-text');
+            const consoleEl = document.getElementById('progress-console');
+            const speedEl = document.getElementById('download-speed');
+            const etaEl = document.getElementById('download-eta');
+            const sizeEl = document.getElementById('file-size');
+
+            if (text) {
+                text.textContent = message;
+            }
+
+            if (consoleEl) {
+                const line = document.createElement('div');
+                line.className = 'console-line';
+                line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                consoleEl.appendChild(line);
+                consoleEl.scrollTop = consoleEl.scrollHeight;
+            }
+
+            if (bar) {
+                if (percent < 0) {
+                    bar.classList.add('progress-bar-animated', 'progress-bar-striped');
+                    bar.style.width = '100%';
+                    bar.textContent = '';
+                } else {
+                    bar.classList.remove('progress-bar-animated', 'progress-bar-striped');
+                    bar.style.width = percent + '%';
+                    bar.textContent = percent + '%';
+                    bar.setAttribute('aria-valuenow', percent);
+                }
+            }
+
+            if (totalBytes > 0) {
+                sizeEl.textContent = formatBytes(totalBytes);
+            }
+
+            if (downloadedBytes > 0 && totalBytes > 0) {
+                const currentTime = Date.now();
+
+                if (lastUpdateTime && currentTime > lastUpdateTime) {
+                    const timeDiff = (currentTime - lastUpdateTime) / 1000;
+                    const bytesDiff = downloadedBytes - lastDownloadedBytes;
+
+                    if (timeDiff > 0 && bytesDiff > 0) {
+                        const speed = bytesDiff / timeDiff;
+                        speedEl.textContent = formatBytes(speed) + '/s';
+
+                        const remainingBytes = totalBytes - downloadedBytes;
+                        const eta = remainingBytes / speed;
+                        etaEl.textContent = formatTime(eta);
+                    }
+                }
+
+                lastUpdateTime = currentTime;
+                lastDownloadedBytes = downloadedBytes;
+            } else if (percent >= 100) {
+                speedEl.textContent = 'Complete';
+                etaEl.textContent = '00:00';
+            }
+        }
+
+        function installComplete(success, message) {
+            const cancelBtn = document.getElementById('cancel-button');
+            cancelBtn.disabled = false;
+            cancelBtn.innerHTML = `<i class="fas fa-times"></i> ${t('cancel_installation')}`;
+
+            if (success) {
+                document.getElementById('success-message').textContent = message;
+                playSuccessSound();
+
+                setView('success-view');
+            } else {
+                showErrorView(message);
+
+            }
+        }
+
+        function installCancelled() {
+            setView('cancelled-view');
+        }
+
+        function showErrorView(message) {
+            const errorMsgEl = document.getElementById('error-message');
+            if (errorMsgEl) {
+                errorMsgEl.textContent = message;
+            }
+            setView('error-view');
+        }
+
+        function showAlert(message, type = 'info') {
+            console.log(`Alert (${type}): ${message}`);
+            alert(message);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded, initializing...');
+            loadSettings().then(() => {
+                updateUITexts();
+            });
+        });
+
+    </script>
+</body>
+</html>
