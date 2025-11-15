@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import sys
 import subprocess
@@ -9,6 +10,24 @@ import requests
 import re
 from pathlib import Path
 
+# UTF-8 Encoding für Windows erzwingen
+if sys.platform == 'win32':
+    # Setze Console auf UTF-8
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        kernel32.SetConsoleCP(65001)
+        kernel32.SetConsoleOutputCP(65001)
+    except Exception:
+        pass
+
+    # Setze Python Encoding
+    if sys.stdout.encoding != 'utf-8':
+        sys.stdout.reconfigure(encoding='utf-8')
+    if sys.stderr.encoding != 'utf-8':
+        sys.stderr.reconfigure(encoding='utf-8')
+
+# Rich imports für Terminal-UI
 try:
     from rich.console import Console
     from rich.panel import Panel
@@ -19,15 +38,18 @@ try:
     from rich.tree import Tree
     from rich.live import Live
 except ImportError:
+    print("Installiere benötigte Pakete...")
     subprocess.run([sys.executable, "-m", "pip", "install", "rich"], check=True)
     os.execl(sys.executable, sys.executable, *sys.argv)
 
 try:
     from bs4 import BeautifulSoup
 except ImportError:
+    print("Installiere benötigte Pakete...")
     subprocess.run([sys.executable, "-m", "pip", "install", "beautifulsoup4"], check=True)
     os.execl(sys.executable, sys.executable, *sys.argv)
 
+# Konstanten
 FILE_NAME = "UBahnSimBerlin_Gesamt.pak"
 DOWNLOAD_URL = "https://cloud.u7-trainz.de/s/fqiXTPcSCtWcLJL/download/UBahnSimBerlin_Gesamt.pak"
 MIRROR_URL = "https://www.trrdroid.net/download/UBahnSimBerlin_Gesamt.pak"
@@ -43,20 +65,37 @@ INSTALLER_VERSION = "1.0"
 
 DEFAULT_LANGUAGE = "de"
 
+# Icons für verschiedene Plattformen
+if sys.platform == 'win32':
+    # Einfachere Icons für Windows CMD
+    ICON_SUCCESS = "[+]"
+    ICON_ERROR = "[x]"
+    ICON_PROGRESS = "[~]"
+    ICON_PENDING = "[ ]"
+    ICON_WARNING = "[!]"
+else:
+    # Unicode Icons für Linux/Mac
+    ICON_SUCCESS = "✓"
+    ICON_ERROR = "✗"
+    ICON_PROGRESS = "●"
+    ICON_PENDING = "○"
+    ICON_WARNING = "⚠"
+
+# Nachrichten
 MESSAGES = {
     "de": {
         "title": "U-Bahn Berlin Mod Installer",
-        "subtitle": "Installiere die U-Bahn Berlin Mod für SubwaySim 2",
-        "welcome": "Willkommen beim U-Bahn Berlin Mod Installer!",
-        "checking_status": "Überprüfe Installation",
+        "subtitle": "Installiere die U-Bahn Berlin fuer SubwaySim 2",
+        "welcome": "Willkommen beim U-Bahn Berlin Installer!",
+        "checking_status": "Ueberpruefe Installation",
         "game_found": "Spiel gefunden",
         "game_not_found": "Spiel nicht gefunden",
         "mod_installed": "Mod ist installiert",
         "mod_not_installed": "Mod ist nicht installiert",
-        "update_available": "Update verfügbar",
+        "update_available": "Update verfuegbar",
         "up_to_date": "Alles aktuell",
         "recommendation": "Empfehlung",
-        "what_to_do": "Was möchtest du tun?",
+        "what_to_do": "Was moechtest du tun?",
         "install_mod": "Mod jetzt installieren",
         "update_mod": "Mod jetzt aktualisieren",
         "reinstall_mod": "Mod neu installieren",
@@ -68,31 +107,31 @@ MESSAGES = {
         "step_backup": "Sicherung erstellen",
         "step_download": "Mod herunterladen",
         "step_install": "Installation",
-        "step_cleanup": "Abschließen",
+        "step_cleanup": "Abschliessen",
         "step_complete": "Fertig!",
         "installation_steps": "Installation",
         "please_wait": "Bitte warten",
         "success_title": "Installation erfolgreich!",
-        "success_message": "Die U-Bahn Berlin Mod wurde erfolgreich installiert.\nDu kannst jetzt das Spiel starten!",
+        "success_message": "Die U-Bahn Berlin wurde erfolgreich installiert.\nDu kannst jetzt das Spiel starten!",
         "error_title": "Fehler",
         "game_not_found_detail": "SubwaySim 2 konnte nicht gefunden werden.\n\nBitte stelle sicher, dass das Spiel installiert und\nmindestens einmal gestartet wurde.",
-        "manual_path": "Spielordner manuell auswählen",
-        "press_enter": "Drücke Enter zum Fortfahren",
+        "manual_path": "Spielordner manuell auswaehlen",
+        "press_enter": "Druecke Enter zum Fortfahren",
         "installation_time": "Installationszeit",
         "current_version": "Aktuelle Version",
-        "available_version": "Verfügbare Version",
-        "status_ok": "Alles in Ordnung! Die Mod ist auf dem neuesten Stand.",
-        "status_update": "Ein Update ist verfügbar! Es wird empfohlen, zu aktualisieren.",
-        "status_not_installed": "Die Mod ist noch nicht installiert.",
+        "available_version": "Verfuegbare Version",
+        "status_ok": "Alles in Ordnung! Der Mod ist auf dem neuesten Stand.",
+        "status_update": "Ein Update ist verfuegbar! Es wird empfohlen, zu aktualisieren.",
+        "status_not_installed": "Der Mod ist noch nicht installiert.\nInstalliere ihn, um die U-Bahn Berlin zu spielen!",
         "advanced_menu_title": "Erweiterte Optionen",
-        "change_language": "Sprache ändern",
+        "change_language": "Sprache aendern",
         "show_details": "Details anzeigen",
-        "back": "Zurück",
+        "back": "Zurueck",
     },
     "en": {
         "title": "U-Bahn Berlin Mod Installer",
-        "subtitle": "Install the U-Bahn Berlin Mod for SubwaySim 2",
-        "welcome": "Welcome to the U-Bahn Berlin Mod Installer!",
+        "subtitle": "Install the U-Bahn Berlin for SubwaySim 2",
+        "welcome": "Welcome to the U-Bahn Berlin Installer!",
         "checking_status": "Checking installation",
         "game_found": "Game found",
         "game_not_found": "Game not found",
@@ -118,7 +157,7 @@ MESSAGES = {
         "installation_steps": "Installation",
         "please_wait": "Please wait",
         "success_title": "Installation successful!",
-        "success_message": "The U-Bahn Berlin Mod has been successfully installed.\nYou can now start the game!",
+        "success_message": "The U-Bahn Berlin has been successfully installed.\nYou can now start the game!",
         "error_title": "Error",
         "game_not_found_detail": "SubwaySim 2 could not be found.\n\nPlease make sure the game is installed and\nhas been started at least once.",
         "manual_path": "Select game folder manually",
@@ -128,7 +167,7 @@ MESSAGES = {
         "available_version": "Available version",
         "status_ok": "All good! The mod is up to date.",
         "status_update": "An update is available! It is recommended to update.",
-        "status_not_installed": "The mod is not yet installed.",
+        "status_not_installed": "The mod is not yet installed.\nInstall it to play the U-Bahn Berlin!",
         "advanced_menu_title": "Advanced Options",
         "change_language": "Change language",
         "show_details": "Show details",
@@ -167,7 +206,12 @@ class InstallationStep:
 
 class TerminalInstaller:
     def __init__(self):
-        self.console = Console()
+        # Console mit Windows-Unterstützung
+        self.console = Console(
+            force_terminal=True,
+            legacy_windows=False,
+            force_interactive=True
+        )
         self.selected_game_folder = None
         self.installation_cancelled = False
         self.backup_file_path = None
@@ -175,6 +219,7 @@ class TerminalInstaller:
         self.settings = self.load_settings()
         self.language = self.settings.get("language", DEFAULT_LANGUAGE)
 
+        # Status info
         self.game_folder = None
         self.mod_installed = False
         self.local_version = None
@@ -201,16 +246,16 @@ class TerminalInstaller:
 
         for step in steps:
             if step.status == "completed":
-                icon = "[green]✓[/green]"
+                icon = f"[green]{ICON_SUCCESS}[/green]"
                 style = "green"
             elif step.status == "in_progress":
-                icon = "[yellow]●[/yellow]"
+                icon = f"[yellow]{ICON_PROGRESS}[/yellow]"
                 style = "yellow bold"
             elif step.status == "failed":
-                icon = "[red]✗[/red]"
+                icon = f"[red]{ICON_ERROR}[/red]"
                 style = "red"
             else:
-                icon = "[dim]○[/dim]"
+                icon = f"[dim]{ICON_PENDING}[/dim]"
                 style = "dim"
 
             time_info = ""
@@ -220,7 +265,7 @@ class TerminalInstaller:
             step_text = f"{icon} [{style}]{self.msg(step.key)}[/{style}]{time_info}"
 
             if step.error:
-                step_text += f"\n  [red]→ {step.error}[/red]"
+                step_text += f"\n  [red]-> {step.error}[/red]"
 
             tree.add(step_text)
 
@@ -299,7 +344,7 @@ class TerminalInstaller:
             return f"{hours}h {minutes}m"
 
     def check_status_silent(self):
-
+        """Ueberprueft den Status ohne UI-Output"""
         self.game_folder = self.find_game_folder()
 
         if not self.game_folder:
@@ -315,7 +360,7 @@ class TerminalInstaller:
 
         if status_file_path.exists():
             try:
-                with open(status_file_path, 'r') as f:
+                with open(status_file_path, 'r', encoding='utf-8') as f:
                     self.local_version = json.load(f).get("installed_version")
             except Exception:
                 pass
@@ -328,11 +373,11 @@ class TerminalInstaller:
         return True
 
     def show_startup_screen(self):
-
+        """Zeigt den Startbildschirm mit automatischer Status-Ueberpruefung"""
         self.clear_screen()
         self.show_header()
 
-
+        # Automatische Status-Ueberpruefung
         with self.console.status(f"[bold cyan]{self.msg('checking_status')}...[/bold cyan]", spinner="dots"):
             time.sleep(0.5)
             game_found = self.check_status_silent()
@@ -340,26 +385,27 @@ class TerminalInstaller:
 
         self.console.print()
 
-
+        # Status-Anzeige
         status_items = []
 
         if game_found:
-            status_items.append(("✓", "green", self.msg("game_found"), str(self.game_folder)))
+            status_items.append((ICON_SUCCESS, "green", self.msg("game_found"), str(self.game_folder)))
         else:
-            status_items.append(("✗", "red", self.msg("game_not_found"), self.msg("game_not_found_detail")))
+            status_items.append((ICON_ERROR, "red", self.msg("game_not_found"), self.msg("game_not_found_detail")))
 
         if self.mod_installed:
             version_text = f"{self.msg('current_version')}: {self.local_version or 'Unknown'}"
-            status_items.append(("✓", "green", self.msg("mod_installed"), version_text))
+            status_items.append((ICON_SUCCESS, "green", self.msg("mod_installed"), version_text))
         else:
-            status_items.append(("○", "yellow", self.msg("mod_not_installed"), ""))
+            status_items.append((ICON_PENDING, "yellow", self.msg("mod_not_installed"), ""))
 
         if self.remote_version and self.local_version and self.local_version != self.remote_version:
             update_text = f"{self.msg('available_version')}: {self.remote_version}"
-            status_items.append(("⚠", "yellow", self.msg("update_available"), update_text))
+            status_items.append((ICON_WARNING, "yellow", self.msg("update_available"), update_text))
         elif self.remote_version and self.local_version:
-            status_items.append(("✓", "green", self.msg("up_to_date"), ""))
+            status_items.append((ICON_SUCCESS, "green", self.msg("up_to_date"), ""))
 
+        # Status-Panel erstellen
         status_table = Table(show_header=False, box=None, padding=(0, 1))
         status_table.add_column("", style="bold", width=3)
         status_table.add_column("", width=25)
@@ -375,6 +421,7 @@ class TerminalInstaller:
         self.console.print(Panel(status_table, title="[bold]Status[/bold]", border_style="cyan", box=box.ROUNDED))
         self.console.print()
 
+        # Empfehlung
         if not game_found:
             recommendation = self.msg("game_not_found_detail")
             rec_style = "red"
@@ -397,7 +444,7 @@ class TerminalInstaller:
         self.console.print()
 
     def show_main_menu(self):
-
+        """Zeigt ein vereinfachtes Hauptmenue basierend auf dem Status"""
         menu_items = []
 
         if not self.game_folder:
@@ -418,7 +465,7 @@ class TerminalInstaller:
             menu_items.append(("3", "advanced_options"))
             menu_items.append(("0", "exit"))
 
-
+        # Menue anzeigen
         menu_table = Table(show_header=False, box=box.SIMPLE, padding=(0, 2))
         menu_table.add_column("", style="cyan bold", width=8)
         menu_table.add_column("", style="white")
@@ -435,7 +482,7 @@ class TerminalInstaller:
 
         choices = [item[0] for item in menu_items]
         choice = Prompt.ask(
-            "[yellow]►[/yellow]",
+            "[yellow]>[/yellow]",
             choices=choices,
             default="1" if "1" in choices else "0"
         )
@@ -443,7 +490,7 @@ class TerminalInstaller:
         return choice, menu_items
 
     def show_advanced_menu(self):
-
+        """Zeigt erweiterte Optionen"""
         self.clear_screen()
         self.show_header()
 
@@ -463,7 +510,7 @@ class TerminalInstaller:
         ))
         self.console.print()
 
-        choice = Prompt.ask("[yellow]►[/yellow]", choices=["0", "1", "2", "3"], default="0")
+        choice = Prompt.ask("[yellow]>[/yellow]", choices=["0", "1", "2", "3"], default="0")
 
         if choice == "1":
             self.change_language()
@@ -475,16 +522,16 @@ class TerminalInstaller:
         return choice != "0"
 
     def change_language(self):
-
+        """Aendert die Sprache"""
         new_lang = Prompt.ask("Language / Sprache", choices=["de", "en"], default=self.language)
         self.language = new_lang
         self.settings["language"] = new_lang
         self.save_settings()
-        self.console.print("[green]✓ Language changed / Sprache geändert[/green]")
+        self.console.print(f"[green]{ICON_SUCCESS} Language changed / Sprache geaendert[/green]")
         time.sleep(1)
 
     def show_details(self):
-
+        """Zeigt detaillierte Informationen"""
         self.clear_screen()
         self.show_header()
 
@@ -502,7 +549,7 @@ class TerminalInstaller:
         self.console.input(f"\n{self.msg('press_enter')}")
 
     def install_mod(self):
-
+        """Installiert oder aktualisiert den Mod"""
         self.clear_screen()
         self.show_header()
 
@@ -514,7 +561,7 @@ class TerminalInstaller:
             self.console.input(f"\n{self.msg('press_enter')}")
             return
 
-
+        # Schritte erstellen
         steps = [
             InstallationStep(self.msg('step_find_game'), 'step_find_game'),
             InstallationStep(self.msg('step_create_mods'), 'step_create_mods'),
@@ -534,7 +581,7 @@ class TerminalInstaller:
 
             with Live(self.create_steps_panel(steps), refresh_per_second=4, console=self.console) as live:
 
-
+                # Schritt 1
                 steps[current_step].start()
                 live.update(self.create_steps_panel(steps))
                 time.sleep(0.3)
@@ -542,7 +589,7 @@ class TerminalInstaller:
                 live.update(self.create_steps_panel(steps))
                 current_step += 1
 
-
+                # Schritt 2
                 steps[current_step].start()
                 live.update(self.create_steps_panel(steps))
                 mods_folder.mkdir(exist_ok=True)
@@ -551,7 +598,7 @@ class TerminalInstaller:
                 live.update(self.create_steps_panel(steps))
                 current_step += 1
 
-
+                # Schritt 3
                 if target_file_path.exists():
                     steps[current_step].start()
                     live.update(self.create_steps_panel(steps))
@@ -565,11 +612,11 @@ class TerminalInstaller:
                 live.update(self.create_steps_panel(steps))
                 current_step += 1
 
-
+                # Schritt 4
                 steps[current_step].start()
                 live.update(self.create_steps_panel(steps))
 
-
+            # Download
             self.console.print()
             download_successful = False
 
@@ -635,10 +682,10 @@ class TerminalInstaller:
 
             self.console.print()
 
-
+            # Restliche Schritte
             with Live(self.create_steps_panel(steps), refresh_per_second=4, console=self.console) as live:
 
-
+                # Schritt 5
                 steps[current_step].start()
                 live.update(self.create_steps_panel(steps))
                 shutil.move(tmp_file_path, target_file_path)
@@ -648,7 +695,7 @@ class TerminalInstaller:
                 live.update(self.create_steps_panel(steps))
                 current_step += 1
 
-
+                # Schritt 6
                 steps[current_step].start()
                 live.update(self.create_steps_panel(steps))
 
@@ -658,7 +705,7 @@ class TerminalInstaller:
 
                 latest_version = self.scrape_website_version() or "Unknown"
                 status_file_path = self.get_status_file_path(mods_folder)
-                with open(status_file_path, 'w') as f:
+                with open(status_file_path, 'w', encoding='utf-8') as f:
                     json.dump({"installed_version": latest_version}, f, indent=2)
 
                 time.sleep(0.5)
@@ -669,7 +716,7 @@ class TerminalInstaller:
 
             total_time = sum(step.get_duration() or 0 for step in steps)
 
-            success_text = f"[bold green]✓ {self.msg('success_title')}[/bold green]\n\n"
+            success_text = f"[bold green]{ICON_SUCCESS} {self.msg('success_title')}[/bold green]\n\n"
             success_text += self.msg('success_message')
             success_text += f"\n\n[dim]{self.msg('installation_time')}: {self.format_time(total_time)}[/dim]"
 
@@ -679,7 +726,7 @@ class TerminalInstaller:
                 box=box.DOUBLE
             ))
 
-
+            # Update lokalen Status
             self.mod_installed = True
             self.local_version = latest_version
 
@@ -689,14 +736,14 @@ class TerminalInstaller:
                 try:
                     original_path = self.backup_file_path.parent / FILE_NAME
                     shutil.move(self.backup_file_path, original_path)
-                    self.console.print("[green]✓ Backup wiederhergestellt[/green]")
+                    self.console.print(f"[green]{ICON_SUCCESS} Backup wiederhergestellt[/green]")
                 except Exception as e:
-                    self.console.print(f"[red]✗ Fehler: {e}[/red]")
+                    self.console.print(f"[red]{ICON_ERROR} Fehler: {e}[/red]")
 
         except Exception as e:
             self.console.print()
             self.console.print(Panel(
-                f"[bold red]✗ {self.msg('error_title')}[/bold red]\n\n{str(e)}",
+                f"[bold red]{ICON_ERROR} {self.msg('error_title')}[/bold red]\n\n{str(e)}",
                 border_style="red"
             ))
 
@@ -704,7 +751,7 @@ class TerminalInstaller:
                 try:
                     original_path = self.backup_file_path.parent / FILE_NAME
                     shutil.move(self.backup_file_path, original_path)
-                    self.console.print("[green]✓ Backup wiederhergestellt[/green]")
+                    self.console.print(f"[green]{ICON_SUCCESS} Backup wiederhergestellt[/green]")
                 except Exception:
                     pass
 
@@ -718,8 +765,8 @@ class TerminalInstaller:
         self.console.input(f"\n{self.msg('press_enter')}")
 
     def select_folder_manually(self):
-
-        self.console.print("[yellow]Bitte gib den vollständigen Pfad zum Spielordner ein:[/yellow]")
+        """Manuelle Ordnerauswahl"""
+        self.console.print("[yellow]Bitte gib den vollstaendigen Pfad zum Spielordner ein:[/yellow]")
         example_path = Path.home() / 'Documents' / 'My Games' / GAME_DIR_NAME
         self.console.print(f"[dim]Beispiel: {example_path}[/dim]\n")
 
@@ -728,22 +775,22 @@ class TerminalInstaller:
         try:
             path = Path(folder_path)
             if not path.exists():
-                self.console.print("[red]✗ Pfad existiert nicht![/red]")
+                self.console.print(f"[red]{ICON_ERROR} Pfad existiert nicht![/red]")
             elif path.name != GAME_DIR_NAME:
-                self.console.print(f"[red]✗ Falscher Ordnername! Erwartet: {GAME_DIR_NAME}[/red]")
+                self.console.print(f"[red]{ICON_ERROR} Falscher Ordnername! Erwartet: {GAME_DIR_NAME}[/red]")
             else:
                 self.selected_game_folder = path
                 self.game_folder = path
-                self.console.print(f"[green]✓ Spielordner gesetzt[/green]")
-
+                self.console.print(f"[green]{ICON_SUCCESS} Spielordner gesetzt[/green]")
+                # Status neu pruefen
                 self.check_status_silent()
         except Exception as e:
-            self.console.print(f"[red]✗ Fehler: {e}[/red]")
+            self.console.print(f"[red]{ICON_ERROR} Fehler: {e}[/red]")
 
         time.sleep(2)
 
     def launch_game(self):
-
+        """Startet das Spiel"""
         with self.console.status("[bold green]Starte Spiel...[/bold green]", spinner="dots"):
             try:
                 if os.name == 'nt':
@@ -756,14 +803,14 @@ class TerminalInstaller:
                 time.sleep(2)
                 return
 
-        self.console.print("[green]✓ Spiel wird gestartet...[/green]")
+        self.console.print(f"[green]{ICON_SUCCESS} Spiel wird gestartet...[/green]")
         time.sleep(2)
 
     def load_settings(self):
         try:
             settings_file = Path("installer_settings.json")
             if settings_file.exists():
-                with open(settings_file, 'r') as f:
+                with open(settings_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
         except Exception:
             pass
@@ -772,19 +819,19 @@ class TerminalInstaller:
 
     def save_settings(self):
         try:
-            with open("installer_settings.json", 'w') as f:
+            with open("installer_settings.json", 'w', encoding='utf-8') as f:
                 json.dump(self.settings, f, indent=2)
         except Exception:
             pass
 
     def run(self):
-
+        """Hauptschleife"""
         while True:
             try:
                 self.show_startup_screen()
                 choice, menu_items = self.show_main_menu()
 
-
+                # Finde die Aktion
                 action = None
                 for option, key in menu_items:
                     if option == choice:
@@ -794,7 +841,7 @@ class TerminalInstaller:
                 if action == "exit":
                     self.clear_screen()
                     self.console.print(Panel(
-                        "[bold cyan]Vielen Dank!\n[dim]Viel Spaß mit der U-Bahn Berlin Mod![/dim][/bold cyan]",
+                        "[bold cyan]Vielen Dank!\n[dim]Viel Spass mit der U-Bahn Berlin![/dim][/bold cyan]",
                         border_style="cyan",
                         box=box.DOUBLE
                     ))
