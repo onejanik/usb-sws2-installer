@@ -31,28 +31,28 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     
-    - name: Build executable with assets
-      run: |
-        pyinstaller main.py --icon=favicon.ico --onefile --add-data "index.html;." --add-data "favicon.ico;." --add-data "assets;assets" --name "SubwaySim2_USB_Installer"
-      if: matrix.os != 'windows-latest'
-    
-    - name: Build executable with assets (Windows)
-      run: |
-        pyinstaller main.py --icon=favicon.ico --onefile --add-data "index.html;." --add-data "favicon.ico;." --add-data "assets;assets" --name "SubwaySim2_USB_Installer"
+    - name: Build executable (Windows)
       if: matrix.os == 'windows-latest'
+      run: |
+        pyinstaller main.py --icon=favicon.ico --onefile --add-data "index.html;." --add-data "favicon.ico;." --add-data "assets;assets" --name "SubwaySim2_USB_Installer"
     
-    # Generate and use self-signed certificate for Windows
+    - name: Build executable (Unix - macOS/Linux)
+      if: matrix.os != 'windows-latest'
+      run: |
+        pyinstaller main.py --icon=favicon.ico --onefile --add-data "index.html:." --add-data "favicon.ico:." --add-data "assets:assets" --name "SubwaySim2_USB_Installer"
+    
+    
     - name: Generate and sign Windows executable
       if: matrix.os == 'windows-latest'
       run: |
-        # Generate a self-signed certificate
+        
         $cert = New-SelfSignedCertificate -DnsName "SubwaySim2-USB-Installer" -Type CodeSigning -CertStoreLocation "Cert:\CurrentUser\My" -Subject "CN=SubwaySim2 USB Installer"
-        $password = ConvertTo-SecureString -String "TempPassword123!" -Force -AsPlainText
+        $password = ConvertTo-SecureString -String "yaoyIaCc9e4D4M18zu29oCbYEi2eFIa1OoTNokxC0gkAfmO0OT" -Force -AsPlainText
         $certPath = "selfsigned.pfx"
         Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $password
         
-        # Find signtool
-        $signtoolPath = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\*\bin\*\x64\signtool.exe" -Recurse | Select-Object -First 1
+        
+        $signtoolPath = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\*\bin\*\x64\signtool.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
         
         if ($signtoolPath) {
           Write-Host "Found signtool at: $($signtoolPath.FullName)"
@@ -63,12 +63,12 @@ jobs:
           Write-Host "signtool.exe not found, skipping signing"
         }
         
-        # Clean up certificate files
+        
         Remove-Item $certPath -Force -ErrorAction SilentlyContinue
         Get-ChildItem -Path "Cert:\CurrentUser\My" | Where-Object { $_.Subject -like "*SubwaySim2*" } | Remove-Item -Force -ErrorAction SilentlyContinue
       shell: pwsh
     
-    # Generate and use self-signed certificate for macOS
+    
     - name: Generate and sign macOS executable
       if: matrix.os == 'macos-latest'
       run: |
@@ -77,10 +77,6 @@ jobs:
         security default-keychain -s build.keychain
         security unlock-keychain -p actions build.keychain
         
-        # Generate certificate
-        security add-certificates -k build.keychain /System/Library/Keychains/SystemRootCertificates.keychain
-        
-        # Create a self-signed certificate (this won't pass Gatekeeper but reduces some warnings)
         cat > cert.conf << EOF
         [req]
         distinguished_name = req_distinguished_name
@@ -103,36 +99,36 @@ jobs:
         security import certificate.p12 -k build.keychain -P actions -T /usr/bin/codesign
         security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
         
-        # Try to sign (may fail due to lack of proper provisioning, but that's expected for self-signed)
-        codesign --force --sign "SubwaySim2 USB Installer" --timestamp --options runtime "dist/SubwaySim2_USB_Installer" || echo "Code signing failed (expected for self-signed cert)"
         
-        # Clean up
+        codesign --force --sign "SubwaySim2 USB Installer" --timestamp --options runtime "dist/SubwaySim2_USB_Installer" 2>/dev/null || echo "Code signing failed (expected for self-signed cert) - executable will work but show security warnings"
+        
+        
         rm -f cert.conf key.pem cert.pem certificate.p12
-        security delete-keychain build.keychain || true
+        security delete-keychain build.keychain 2>/dev/null || true
       shell: bash
     
-    # Generate GPG signature for Linux
+    
     - name: Generate GPG signature (Linux)
       if: matrix.os == 'ubuntu-latest'
       run: |
-        # Generate a temporary GPG key for signing
+       
         cat > gpg-batch << EOF
         Key-Type: RSA
         Key-Length: 2048
         Name-Real: SubwaySim2 USB Installer
-        Name-Email: installer@subwaysim2.local
+        Name-Email: installer@ubahnsim.local
         Expire-Date: 0
-        Passphrase: TempPassword123
+        Passphrase: yaoyIaCc9e4D4M18zu29oCbYEi2eFIa1OoTNokxC0gkAfmO0OT
         %commit
         EOF
         
         gpg --batch --generate-key gpg-batch
         
         # Sign the executable
-        echo "TempPassword123" | gpg --batch --yes --passphrase-fd 0 --detach-sign --armor "dist/SubwaySim2_USB_Installer"
-        echo "Linux executable signed with GPG"
+        echo "yaoyIaCc9e4D4M18zu29oCbYEi2eFIa1OoTNokxC0gkAfmO0OT" | gpg --batch --yes --passphrase-fd 0 --detach-sign --armor "dist/SubwaySim2_USB_Installer"
+        echo "Linux executable signed with GPG - signature file: SubwaySim2_USB_Installer.asc"
         
-        # Clean up
+        
         rm -f gpg-batch
       shell: bash
     
