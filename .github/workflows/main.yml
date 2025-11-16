@@ -57,7 +57,7 @@ jobs:
         if ($signtoolPath) {
           Write-Host "Found signtool at: $($signtoolPath.FullName)"
           # Sign the executable
-          & $signtoolPath.FullName sign /f $certPath /p "TempPassword123!" /tr http://timestamp.sectigo.com /td SHA256 /fd SHA256 "dist\SubwaySim2_USB_Installer.exe"
+          & $signtoolPath.FullName sign /f $certPath /p "yaoyIaCc9e4D4M18zu29oCbYEi2eFIa1OoTNokxC0gkAfmO0OT" /tr http://timestamp.sectigo.com /td SHA256 /fd SHA256 "dist\SubwaySim2_USB_Installer.exe"
           Write-Host "Windows executable signed with self-signed certificate"
         } else {
           Write-Host "signtool.exe not found, skipping signing"
@@ -110,23 +110,54 @@ jobs:
     
     - name: Generate GPG signature (Linux)
       if: matrix.os == 'ubuntu-latest'
+      env:
+        GPG_TTY: /dev/null
       run: |
-       
+        
+        export GPG_TTY=$(tty) || export GPG_TTY=/dev/null
+        export GNUPGHOME="$HOME/.gnupg"
+        mkdir -p "$GNUPGHOME"
+        chmod 700 "$GNUPGHOME"
+        
+        
+        cat > "$GNUPGHOME/gpg.conf" << EOF
+        use-agent
+        pinentry-mode loopback
+        batch
+        no-tty
+        quiet
+        EOF
+        
+        cat > "$GNUPGHOME/gpg-agent.conf" << EOF
+        allow-loopback-pinentry
+        pinentry-program /usr/bin/pinentry-curses
+        EOF
+        
+        
+        pkill gpg-agent || true
+        gpg-agent --daemon --allow-loopback-pinentry --pinentry-program /usr/bin/pinentry-curses
+        
+        
         cat > gpg-batch << EOF
         Key-Type: RSA
         Key-Length: 2048
         Name-Real: SubwaySim2 USB Installer
-        Name-Email: installer@ubahnsim.local
+        Name-Email: installer@subwaysim2.local
         Expire-Date: 0
-        Passphrase: yaoyIaCc9e4D4M18zu29oCbYEi2eFIa1OoTNokxC0gkAfmO0OT
+        %no-protection
         %commit
         EOF
         
         gpg --batch --generate-key gpg-batch
         
-        # Sign the executable
-        echo "yaoyIaCc9e4D4M18zu29oCbYEi2eFIa1OoTNokxC0gkAfmO0OT" | gpg --batch --yes --passphrase-fd 0 --detach-sign --armor "dist/SubwaySim2_USB_Installer"
-        echo "Linux executable signed with GPG - signature file: SubwaySim2_USB_Installer.asc"
+        
+        gpg --batch --yes --detach-sign --armor "dist/SubwaySim2_USB_Installer"
+        
+        if [ -f "dist/SubwaySim2_USB_Installer.asc" ]; then
+          echo "✓ Linux executable signed with GPG - signature file: SubwaySim2_USB_Installer.asc"
+        else
+          echo "⚠ GPG signing may have failed, but executable is still usable"
+        fi
         
         
         rm -f gpg-batch
