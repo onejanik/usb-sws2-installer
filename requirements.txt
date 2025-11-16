@@ -1,2 +1,3 @@
 pywebview
 beautifulsoup4
+requests
