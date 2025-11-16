@@ -1,2 +1,2 @@
-webview
-bs4
+pywebview
+beautifulsoup4
