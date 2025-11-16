@@ -34,12 +34,12 @@ jobs:
     - name: Build executable (Windows)
       if: matrix.os == 'windows-latest'
       run: |
-        pyinstaller main.py --icon=favicon.ico --onefile --add-data "index.html;." --add-data "favicon.ico;." --add-data "assets;assets" --name "SubwaySim2_USB_Installer"
+        pyinstaller main.py --icon=favicon.ico --onefile --windowed --add-data "index.html;." --add-data "favicon.ico;." --add-data "assets;assets" --name "SubwaySim2_USB_Installer"
     
     - name: Build executable (Unix - macOS/Linux)
       if: matrix.os != 'windows-latest'
       run: |
-        pyinstaller main.py --icon=favicon.ico --onefile --add-data "index.html:." --add-data "favicon.ico:." --add-data "assets:assets" --name "SubwaySim2_USB_Installer"
+        pyinstaller main.py --icon=favicon.ico --onefile --windowed --add-data "index.html:." --add-data "favicon.ico:." --add-data "assets:assets" --name "SubwaySim2_USB_Installer"
     
     
     - name: Generate and sign Windows executable
