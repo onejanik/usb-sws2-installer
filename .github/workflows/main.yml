@@ -11,43 +11,149 @@ jobs:
       matrix:
         os: ['windows-latest', 'ubuntu-latest', 'macos-latest']
     env:
-      MAIN_PY_FILE: 'main.py'  # Define the path to your main.py file here
+      MAIN_PY_FILE: 'main.py'
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+    
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
+    
+    - name: Install system dependencies (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk python3-dev
+    
     - name: Install Python dependencies
       run: |
+        python -m pip install --upgrade pip
         pip install -r requirements.txt
-      working-directory: ./
-    - name: Install PyInstaller
-      run: |
         pip install pyinstaller
       working-directory: ./
-    - name: Build executable
+    
+    - name: Build executable with assets
       run: |
-        pyinstaller ${{ env.MAIN_PY_FILE }} --icon=favicon.ico
+        pyinstaller ${{ env.MAIN_PY_FILE }} \
+          --icon=favicon.ico \
+          --onefile \
+          --add-data "index.html;." \
+          --add-data "favicon.ico;." \
+          --add-data "assets;assets" \
+          --name "SubwaySim2_USB_Installer"
       working-directory: ./
+      if: matrix.os != 'windows-latest'
+    
+    - name: Build executable with assets (Windows)
+      run: |
+        pyinstaller ${{ env.MAIN_PY_FILE }} --icon=favicon.ico --onefile --add-data "index.html;." --add-data "favicon.ico;." --add-data "assets;assets" --name "SubwaySim2_USB_Installer"
+      working-directory: ./
+      if: matrix.os == 'windows-latest'
+    
+    # Code Signing - Windows
+    - name: Sign Windows executable
+      if: matrix.os == 'windows-latest'
+      env:
+        CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE }}
+        CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+      run: |
+        if ([string]::IsNullOrEmpty($env:CERTIFICATE_BASE64)) {
+          Write-Host "No certificate found, skipping signing"
+          exit 0
+        }
+        
+        # Decode certificate
+        $certBytes = [Convert]::FromBase64String($env:CERTIFICATE_BASE64)
+        $certPath = "cert.p12"
+        [IO.File]::WriteAllBytes($certPath, $certBytes)
+        
+        # Sign the executable
+        $signtoolPath = "C:\Program Files (x86)\Windows Kits\10\bin\*\x64\signtool.exe"
+        $signtoolExe = Get-ChildItem -Path $signtoolPath -Recurse | Select-Object -First 1 -ExpandProperty FullName
+        
+        if ($signtoolExe) {
+          & $signtoolExe sign /f $certPath /p $env:CERTIFICATE_PASSWORD /tr http://timestamp.sectigo.com /td SHA256 /fd SHA256 "dist\SubwaySim2_USB_Installer.exe"
+          Write-Host "Executable signed successfully"
+        } else {
+          Write-Host "signtool.exe not found, skipping signing"
+        }
+        
+        # Clean up certificate
+        Remove-Item $certPath -Force
+      shell: pwsh
+    
+    # Code Signing - macOS
+    - name: Sign macOS executable
+      if: matrix.os == 'macos-latest'
+      env:
+        APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      run: |
+        if [ -z "$APPLE_CERTIFICATE" ]; then
+          echo "No certificate found, skipping signing"
+          exit 0
+        fi
+        
+        # Import certificate
+        echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+        security create-keychain -p actions build.keychain
+        security default-keychain -s build.keychain
+        security unlock-keychain -p actions build.keychain
+        security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+        
+        # Sign the executable
+        codesign --force --sign "$APPLE_TEAM_ID" --timestamp --options runtime "dist/SubwaySim2_USB_Installer"
+        echo "Executable signed successfully"
+        
+        # Clean up
+        rm certificate.p12
+        security delete-keychain build.keychain
+      shell: bash
+    
+    # Note: Linux signing would require a different approach, typically with GPG signatures
+    - name: Create GPG signature (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      env:
+        GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      run: |
+        if [ -z "$GPG_PRIVATE_KEY" ]; then
+          echo "No GPG key found, skipping signing"
+          exit 0
+        fi
+        
+        # Import GPG key
+        echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+        
+        # Sign the executable
+        echo "$GPG_PASSPHRASE" | gpg --batch --yes --passphrase-fd 0 --detach-sign --armor "dist/SubwaySim2_USB_Installer"
+        echo "Executable signed with GPG successfully"
+      shell: bash
+    
     - name: Create Artifact (Windows)
       if: matrix.os == 'windows-latest'
       uses: actions/upload-artifact@v4
       with:
         name: windows-executables
         path: dist/
+    
     - name: Create Artifact (Linux)
       if: matrix.os == 'ubuntu-latest'
       uses: actions/upload-artifact@v4
       with:
         name: linux-executables
         path: dist/
+    
     - name: Create Artifact (macOS)
       if: matrix.os == 'macos-latest'
       uses: actions/upload-artifact@v4
       with:
         name: macos-executables
         path: dist/
+    
     - name: List files in dist folder
-      run: ls -R ./dist/
+      run: ls -la ./dist/
