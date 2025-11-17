@@ -1,8 +1,10 @@
-name: Build Executables
+name: Build GUI Executables
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -10,6 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ['windows-latest', 'ubuntu-latest', 'macos-latest']
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -18,6 +21,7 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
+        cache: 'pip'
     
     - name: Install system dependencies (Linux)
       if: matrix.os == 'ubuntu-latest'
@@ -29,115 +33,213 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pyinstaller
     
-    - name: Build executable (Windows)
+    
+    - name: Build with Nuitka (Windows GUI)
       if: matrix.os == 'windows-latest'
-      run: |
-        pyinstaller main.py --icon=favicon.ico --onefile --windowed --add-data "index.html;." --add-data "favicon.ico;." --add-data "assets;assets" --name "SubwaySim2_USB_Installer"
+      uses: Nuitka/Nuitka-Action@main
+      with:
+        nuitka-version: main
+        script-name: main.py
+        mode: app
+        output-dir: build
+        output-file: SubwaySim2_USB_Installer.exe
+        windows-console-mode: disable
+        windows-icon-from-ico: favicon.ico
+        company-name: "FärberIT Solutions"
+        product-name: "SubwaySim2 USB Installer"
+        file-version: "1.0.0.0"
+        product-version: "1.0.0"
+        file-description: "U-Bahn Berlin Mod Installer - GUI"
+        copyright: "© 2025 FärberIT Solutions"
+        assume-yes-for-downloads: true
+        include-data-files: |
+          index.html=index.html
+          favicon.ico=favicon.ico
+        include-data-dir: assets=assets
+        enable-plugins: pywebview
+        onefile-tempdir-spec: "{CACHE_DIR}/{COMPANY}/{PRODUCT}/{VERSION}"
+
     
-    - name: Build executable (Unix - macOS/Linux)
-      if: matrix.os != 'windows-latest'
-      run: |
-        pyinstaller main.py --icon=favicon.ico --onefile --windowed --add-data "index.html:." --add-data "favicon.ico:." --add-data "assets:assets" --name "SubwaySim2_USB_Installer"
+    - name: Build with Nuitka (Linux GUI)
+      if: matrix.os == 'ubuntu-latest'
+      uses: Nuitka/Nuitka-Action@main
+      with:
+        nuitka-version: main
+        script-name: main.py
+        mode: app
+        output-dir: build
+        output-file: SubwaySim2_USB_Installer.bin
+        assume-yes-for-downloads: true
+        include-data-files: |
+          index.html=index.html
+          favicon.ico=favicon.ico
+        include-data-dir: assets=assets
     
+    - name: Build with Nuitka (macOS GUI)
+      if: matrix.os == 'macos-latest'
+      uses: Nuitka/Nuitka-Action@main
+      with:
+        nuitka-version: main
+        script-name: main.py
+        mode: app
+        output-dir: build
+        output-file: SubwaySim2_USB_Installer.bin
+        macos-app-icon: favicon.ico
+        assume-yes-for-downloads: true
+        include-data-files: |
+          index.html=index.html
+          favicon.ico=favicon.ico
+        include-data-dir: assets=assets
     
-    - name: Generate and sign Windows executable
+   
+    - name: Sign Windows executable
       if: matrix.os == 'windows-latest'
+      env:
+        CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+        CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
       run: |
-        
-        $cert = New-SelfSignedCertificate -DnsName "SubwaySim2-USB-Installer" -Type CodeSigning -CertStoreLocation "Cert:\CurrentUser\My" -Subject "CN=SubwaySim2 USB Installer"
-        $password = ConvertTo-SecureString -String "yaoyIaCc9e4D4M18zu29oCbYEi2eFIa1OoTNokxC0gkAfmO0OT" -Force -AsPlainText
-        $certPath = "selfsigned.pfx"
-        Export-PfxCertificate -Cert $cert -FilePath $certPath -Password $password
-        
+        $certBytes = [Convert]::FromBase64String($env:CERTIFICATE_BASE64)
+        $certPath = "signing-cert.pfx"
+        [IO.File]::WriteAllBytes($certPath, $certBytes)
         
         $signtoolPath = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\*\bin\*\x64\signtool.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
         
-        if ($signtoolPath) {
-          Write-Host "Found signtool at: $($signtoolPath.FullName)"
-          # Sign the executable
-          & $signtoolPath.FullName sign /f $certPath /p "yaoyIaCc9e4D4M18zu29oCbYEi2eFIa1OoTNokxC0gkAfmO0OT" /tr http://timestamp.sectigo.com /td SHA256 /fd SHA256 "dist\SubwaySim2_USB_Installer.exe"
-          Write-Host "Windows executable signed with self-signed certificate"
-        } else {
-          Write-Host "signtool.exe not found, skipping signing"
+        if (-not $signtoolPath) {
+          Write-Error "signtool.exe nicht gefunden!"
+          exit 1
         }
         
+        $exePath = Get-ChildItem -Path "build" -Filter "*.exe" | Select-Object -First 1
         
-        Remove-Item $certPath -Force -ErrorAction SilentlyContinue
-        Get-ChildItem -Path "Cert:\CurrentUser\My" | Where-Object { $_.Subject -like "*SubwaySim2*" } | Remove-Item -Force -ErrorAction SilentlyContinue
+        if (-not $exePath) {
+          Write-Error "Keine EXE gefunden!"
+          exit 1
+        }
+        
+        Write-Host "Signiere: $($exePath.FullName)"
+        
+        & $signtoolPath.FullName sign `
+          /f $certPath `
+          /p $env:CERTIFICATE_PASSWORD `
+          /tr http://timestamp.digicert.com `
+          /td SHA256 `
+          /fd SHA256 `
+          /d "SubwaySim2 USB Installer" `
+          /du "https://github.com/${{ github.repository }}" `
+          $exePath.FullName
+        
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Signierung fehlgeschlagen!"
+          exit 1
+        }
+        
+        Write-Host "✓ GUI-Executable signiert!"
+        Remove-Item $certPath -Force
       shell: pwsh
     
     
-    - name: Generate and sign macOS executable
-      if: matrix.os == 'macos-latest'
+    - name: Sign macOS executable
+      if: matrix.os == 'macos-latest' && secrets.MACOS_CERTIFICATE_BASE64 != ''
+      env:
+        MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+        MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
       run: |
-        # Create a self-signed certificate for code signing
-        security create-keychain -p actions build.keychain
-        security default-keychain -s build.keychain
-        security unlock-keychain -p actions build.keychain
-        
-        cat > cert.conf << EOF
-        [req]
-        distinguished_name = req_distinguished_name
-        x509_extensions = v3_req
-        prompt = no
-
-        [req_distinguished_name]
-        CN = SubwaySim2 USB Installer
-        O = SubwaySim2 Development
-        C = US
-
-        [v3_req]
-        keyUsage = keyEncipherment, dataEncipherment, digitalSignature
-        extendedKeyUsage = codeSigning
-        EOF
-        
-        openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem -days 365 -nodes -config cert.conf
-        openssl pkcs12 -export -out certificate.p12 -inkey key.pem -in cert.pem -passout pass:actions
-        
-        security import certificate.p12 -k build.keychain -P actions -T /usr/bin/codesign
-        security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
-        
-        
-        codesign --force --sign "SubwaySim2 USB Installer" --timestamp --options runtime "dist/SubwaySim2_USB_Installer" 2>/dev/null || echo "Code signing failed (expected for self-signed cert) - executable will work but show security warnings"
-        
-        
-        rm -f cert.conf key.pem cert.pem certificate.p12
-        security delete-keychain build.keychain 2>/dev/null || true
+        if [ -n "$MACOS_CERTIFICATE_BASE64" ]; then
+          echo "$MACOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+          
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+          
+          codesign --force --options runtime --timestamp --sign "FärberIT Solutions" \
+            "build/SubwaySim2_USB_Installer.bin" || \
+            echo "⚠ Code signing failed (not critical)"
+          
+          rm -f certificate.p12
+          security delete-keychain build.keychain 2>/dev/null || true
+        else
+          echo "Kein macOS-Zertifikat vorhanden, überspringe Signierung"
+        fi
       shell: bash
     
     
+    - name: Prepare Linux executable
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        chmod +x build/*.bin
+        ls -lh build/
     
-    - name: Create Artifact (Windows)
+    - name: Prepare macOS executable
+      if: matrix.os == 'macos-latest'
+      run: |
+        chmod +x build/*.bin
+        ls -lh build/
+    
+    
+    - name: Upload Windows artifact
       if: matrix.os == 'windows-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: windows-executables
-        path: dist/
-        retention-days: 30
+        name: SubwaySim2_USB_Installer_GUI_Windows
+        path: build/*.exe
+        retention-days: 90
     
-    - name: Create Artifact (Linux)
+    - name: Upload Linux artifact
       if: matrix.os == 'ubuntu-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: linux-executables
-        path: dist/
-        retention-days: 30
+        name: SubwaySim2_USB_Installer_GUI_Linux
+        path: build/*.bin
+        retention-days: 90
     
-    - name: Create Artifact (macOS)
+    - name: Upload macOS artifact
       if: matrix.os == 'macos-latest'
       uses: actions/upload-artifact@v4
       with:
-        name: macos-executables
-        path: dist/
-        retention-days: 30
+        name: SubwaySim2_USB_Installer_GUI_macOS
+        path: build/*.bin
+        retention-days: 90
     
-    - name: List final build artifacts (Windows)
-      if: matrix.os == 'windows-latest'
-      run: Get-ChildItem -Path "./dist/" -Force
-      shell: pwsh
     
-    - name: List final build artifacts (Unix)
-      if: matrix.os != 'windows-latest'
-      run: ls -la ./dist/
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: build/*
+        draft: false
+        prerelease: false
+        body: |
+          ## SubwaySim2 USB Installer - GUI Version
+          
+          ### Download
+          
+          - **Windows:** `SubwaySim2_USB_Installer.exe` (signiert)
+          - **Linux:** `SubwaySim2_USB_Installer.bin`
+          - **macOS:** `SubwaySim2_USB_Installer.bin`
+          
+          ### Installation
+          
+          #### Windows
+          1. EXE herunterladen
+          2. Doppelklick zum Starten
+          3. Falls SmartScreen warnt: "Weitere Informationen" → "Trotzdem ausführen"
+          
+          #### Linux
+          ```
+          chmod +x SubwaySim2_USB_Installer.bin
+          ./SubwaySim2_USB_Installer.bin
+          ```
+          
+          #### macOS
+          ```
+          chmod +x SubwaySim2_USB_Installer.bin
+          ./SubwaySim2_USB_Installer.bin
+          ```
+          
+          Falls macOS Sicherheitswarnung: Systemeinstellungen → Sicherheit → "Trotzdem öffnen"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
