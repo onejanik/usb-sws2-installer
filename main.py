@@ -11,19 +11,25 @@ import requests
 import webbrowser
 from pathlib import Path
 
+
+if getattr(sys, 'frozen', False):
+    
+    if hasattr(sys, '_MEIPASS'):
+        
+        BASE_PATH = Path(sys._MEIPASS)
+    else:
+        
+        BASE_PATH = Path(sys.executable).parent
+else:
+    
+    BASE_PATH = Path(__file__).parent
+
+
 os.environ["PYWEBVIEW_CHROMIUM_FLAGS"] = "--no-sandbox --disable-gpu"
 
-try:
-    import webview
-except ImportError:
-    subprocess.run([sys.executable, "-m", "pip", "install", "pywebview"], check=True)
-    os.execl(sys.executable, sys.executable, *sys.argv)
 
-try:
-    from bs4 import BeautifulSoup
-except ImportError:
-    subprocess.run([sys.executable, "-m", "pip", "install", "beautifulsoup4"], check=True)
-    os.execl(sys.executable, sys.executable, *sys.argv)
+import webview
+from bs4 import BeautifulSoup
 
 FILE_NAME = "UBahnSimBerlin_Gesamt.pak"
 DOWNLOAD_URL = "https://cloud.u7-trainz.de/s/fqiXTPcSCtWcLJL/download/UBahnSimBerlin_Gesamt.pak"
@@ -57,7 +63,7 @@ MESSAGES = {
         "download_could_not_be_completed": "Download konnte nicht abgeschlossen werden.",
         "download_complete_install": "Download abgeschlossen. Mod wird installiert...",
         "installation_complete_saving": "Installation abgeschlossen. Version wird gespeichert...",
-        "installation_failed": "Installation fehlgeschlagen: {error}",
+        "installation_failed": "Installation fehlgeschlossen: {error}",
         "restoring_backup": "Installation abgebrochen. Ursprüngliche Dateien werden wiederhergestellt...",
         "cleanup_temp": "Temporäre Dateien werden aufgeräumt..."
     },
@@ -645,9 +651,12 @@ class Api:
 if __name__ == '__main__':
     api = Api()
 
+    
+    html_path = str(BASE_PATH / 'index.html')
+    
     main_window = webview.create_window(
         'SubwaySim2 USB Installer v1.0 Beta',
-        'index.html',
+        html_path,  
         width=800,
         height=600,
         resizable=False
