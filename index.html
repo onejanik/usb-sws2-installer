@@ -216,7 +216,7 @@
                     <i class="fas fa-download"></i> <span data-i18n="install_now">Jetzt Installieren</span>
                 </button>
                 <button id="btn-update" onclick="checkUpdate()"
-                        class="btn btn-warning rounded-pill p-3" type="button" disabled>
+                        class="btn btn-warning rounded-pill p-3" type="button" disabled style="display: none;">
                     <i class="fas fa-sync-alt"></i> <span data-i18n="update_now">Jetzt Updaten</span>
                 </button>
             </div>
@@ -677,13 +677,16 @@
             const btnInstall = document.getElementById('btn-install');
             const selectFolderBtn = document.getElementById('select-folder-button');
 
+            // Hide the update button - we'll use only the install button with state-dependent behavior
+            btnUpdate.style.display = 'none';
+
             if (status.error) {
                 versionEl.textContent = t('game_folder_not_found');
                 versionEl.className = 'status-badge bg-danger';
                 gamePathStatusEl.style.display = 'none';
-                btnUpdate.disabled = true;
                 btnInstall.disabled = false;
                 btnInstall.innerHTML = `<i class="fas fa-folder-open"></i> ${t('select_folder')}`;
+                btnInstall.onclick = selectPath;
 
                 if (status.path_required) {
                     selectFolderBtn.style.display = 'block';
@@ -696,42 +699,50 @@
                 if (status.installed) {
                     versionEl.textContent = `${t('installed')}: ${status.local_version || "Unknown"}`;
                     versionEl.className = 'status-badge bg-success';
-                    btnInstall.innerHTML = `<i class="fas fa-wrench"></i> ${t('repair')}`;
 
+                    // Check for updates and adjust button accordingly
                     checkUpdateAvailability(status.local_version);
                 } else {
+                    // Not installed - show install button
                     versionEl.textContent = t('not_installed');
                     versionEl.className = 'status-badge bg-warning';
-                    btnUpdate.disabled = true;
-                    btnUpdate.innerHTML = `<i class="fas fa-sync-alt"></i> ${t('update_now')}`;
-                    btnUpdate.className = "btn btn-warning rounded-pill p-3";
                     btnInstall.innerHTML = `<i class="fas fa-download"></i> ${t('install_now')}`;
+                    btnInstall.onclick = startInstall;
+                    btnInstall.className = "btn btn-primary rounded-pill p-3";
                 }
             }
         }
 
         async function checkUpdateAvailability(localVersion) {
-            const btnUpdate = document.getElementById('btn-update');
+            const btnInstall = document.getElementById('btn-install');
             try {
                 const result = await pywebview.api.check_for_update(localVersion);
                 if (result.update_available) {
-                    btnUpdate.disabled = false;
-                    btnUpdate.innerHTML = `<i class="fas fa-arrow-up"></i> ${t('update_available')}`;
-                    btnUpdate.className = "btn btn-success rounded-pill p-3";
+                    // Update available - button should trigger update with confirmation
+                    btnInstall.disabled = false;
+                    btnInstall.innerHTML = `<i class="fas fa-arrow-up"></i> ${t('update_available')}`;
+                    btnInstall.className = "btn btn-success rounded-pill p-3";
+                    btnInstall.onclick = checkUpdate;
                 } else if (!result.error) {
-                    btnUpdate.disabled = true;
-                    btnUpdate.innerHTML = `<i class="fas fa-check"></i> ${t('current')}`;
-                    btnUpdate.className = "btn btn-outline-secondary rounded-pill p-3";
+                    // Up to date - button shows repair option
+                    btnInstall.disabled = false;
+                    btnInstall.innerHTML = `<i class="fas fa-wrench"></i> ${t('repair')}`;
+                    btnInstall.className = "btn btn-secondary rounded-pill p-3";
+                    btnInstall.onclick = startInstall;
                 } else {
-                    btnUpdate.disabled = false;
-                    btnUpdate.innerHTML = `<i class="fas fa-sync-alt"></i> ${t('check_update')}`;
-                    btnUpdate.className = "btn btn-warning rounded-pill p-3";
+                    // Error or unknown state - allow reinstall
+                    btnInstall.disabled = false;
+                    btnInstall.innerHTML = `<i class="fas fa-download"></i> ${t('install_now')}`;
+                    btnInstall.className = "btn btn-primary rounded-pill p-3";
+                    btnInstall.onclick = startInstall;
                 }
             } catch (e) {
                 console.warn("Error checking update availability:", e);
-                btnUpdate.disabled = false;
-                btnUpdate.innerHTML = `<i class="fas fa-sync-alt"></i> ${t('update_now')}`;
-                btnUpdate.className = "btn btn-warning rounded-pill p-3";
+                // On error, show repair option
+                btnInstall.disabled = false;
+                btnInstall.innerHTML = `<i class="fas fa-wrench"></i> ${t('repair')}`;
+                btnInstall.className = "btn btn-secondary rounded-pill p-3";
+                btnInstall.onclick = startInstall;
             }
         }
 
